@@ -1,0 +1,30 @@
+# Reports directory
+reports/
+
+# Old report files (in case they still exist in root)
+jira_report_*.txt
+jira_analysis_*.json
+comparison_report_*.csv
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
