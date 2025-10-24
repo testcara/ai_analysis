@@ -484,8 +484,13 @@ try:
             'start_date': args.start,
             'end_date': args.end,
             'status': args.status,
+            'assignee': args.assignee,
         },
-        'jql_query': JQL_DONE_ISSUES,
+        'jql_queries': {
+            'main_analysis': JQL_DONE_ISSUES,
+            'velocity_calculation': JQL_STORIES if 'JQL_STORIES' in locals() else None,
+        },
+        'jql_query': JQL_DONE_ISSUES,  # Kept for backward compatibility
         'total_issues_analyzed': len(all_issues) if 'all_issues' in locals() else 0,
         'closing_time_stats': {
             'average_days': avg_closing_time_days if 'avg_closing_time_days' in locals() else None,
@@ -495,6 +500,7 @@ try:
         },
         'state_statistics': {},
         'velocity_stats': {
+            'query_used': JQL_STORIES if 'JQL_STORIES' in locals() else None,
             'total_stories': total_stories if 'total_stories' in locals() else 0,
             'total_story_points': total_story_points if 'total_story_points' in locals() else 0,
             'stories_with_points': stories_with_points if 'stories_with_points' in locals() else 0,
@@ -515,7 +521,11 @@ try:
                 'avg_transitions_per_issue': stats['total_count'] / stats['issue_count']
             }
 
-    output_filename = f'jira_analysis_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+    # Create output directory for JSON files
+    json_output_dir = 'tmp/original_json_output'
+    os.makedirs(json_output_dir, exist_ok=True)
+
+    output_filename = os.path.join(json_output_dir, f'jira_analysis_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json')
     with open(output_filename, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
 
