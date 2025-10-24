@@ -1,24 +1,49 @@
-# Reports directory
-reports/
-
-# Old report files (in case they still exist in root)
-jira_report_*.txt
-jira_analysis_*.json
-comparison_report_*.csv
-
-# Python cache
+# Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Virtual environment
+# Virtual environments
 venv/
-ENV/
 env/
+ENV/
+env.bak/
+venv.bak/
 
-# IDE
+# Testing
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+htmlcov/
+
+# IDEs
 .vscode/
 .idea/
 *.swp
@@ -28,3 +53,64 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Jira tokens and credentials
+*credentials*
+*token*
+*.pem
+*.key
+
+# But keep config directory (contains phase configuration)
+!config/
+!config/**
+
+# Don't commit github.conf if accidentally created (use env vars instead)
+config/github.conf
+
+# Google Sheets credentials (keep secure!)
+*service-account*.json
+*oauth*.json
+google_sheets_token.json
+
+# Generated reports
+reports/
+!reports/.gitkeep
+
+# Temporary outputs
+tmp/
+
+# Old report files (in case they still exist in root)
+jira_report_*.txt
+jira_analysis_*.json
+comparison_report_*.csv
+comparison_report_*.tsv
+
+# Temporary files
+*.tmp
+*.bak
+1.sh
+setting.sh
+requriements.txt
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
