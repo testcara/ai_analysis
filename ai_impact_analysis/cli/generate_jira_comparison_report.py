@@ -9,6 +9,136 @@ import re
 import argparse
 from datetime import datetime
 
+from ai_impact_analysis.report_utils import (
+    calculate_percentage_change,
+    format_metric_changes,
+    add_metric_change,
+    normalize_username
+)
+
+
+def parse_phase_config(config_path="config/jira_phases.conf"):
+    """
+    Parse phase configuration file to extract phase names and date ranges.
+
+    Args:
+        config_path: Path to config file
+
+    Returns:
+        List of tuples: [(phase_name, start_date, end_date), ...]
+    """
+    phases = []
+
+    if not os.path.exists(config_path):
+        return phases
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    # Find the PHASES array (skip commented lines)
+    in_array = False
+    array_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Skip comments
+        if stripped.startswith("#"):
+            continue
+
+        # Start of array
+        if "PHASES=(" in line and not stripped.startswith("#"):
+            in_array = True
+            # Get content after PHASES=(
+            array_start = line.split("PHASES=(", 1)[1]
+            array_lines.append(array_start)
+            # Check if array closes on same line
+            if ")" in array_start:
+                break
+            continue
+
+        # Inside array
+        if in_array:
+            array_lines.append(line)
+            if ")" in line:
+                break
+
+    # Join all array lines and extract phase entries
+    array_content = "".join(array_lines)
+
+    # Extract phase entries (quoted strings)
+    phase_pattern = r'"([^"]+)"'
+    phase_entries = re.findall(phase_pattern, array_content)
+
+    for entry in phase_entries:
+        # Parse format: "Phase Name|Start Date|End Date"
+        parts = entry.split("|")
+        if len(parts) == 3:
+            phase_name = parts[0].strip()
+            start_date = parts[1].strip()
+            end_date = parts[2].strip()
+            phases.append((phase_name, start_date, end_date))
+
+    return phases
+
+
+def extract_dates_from_jql(jql_query):
+    """
+    Extract approximate start and end dates from JQL query.
+    The JQL uses relative dates like 'resolved >= "-375d" AND resolved <= "-157d"'
+
+    Args:
+        jql_query: JQL query string
+
+    Returns:
+        tuple: (days_ago_start, days_ago_end) or (None, None) if not found
+    """
+    # Look for resolved date filters: resolved >= "-XXXd" AND resolved <= "-YYYd"
+    start_match = re.search(r'resolved\s*>=\s*"-?(\d+)d"', jql_query, re.IGNORECASE)
+    end_match = re.search(r'resolved\s*<=\s*"-?(\d+)d"', jql_query, re.IGNORECASE)
+
+    if start_match and end_match:
+        days_ago_start = int(start_match.group(1))
+        days_ago_end = int(end_match.group(1))
+        return (days_ago_start, days_ago_end)
+
+    return (None, None)
+
+
+def create_empty_jira_report(phase_name, start_date, end_date):
+    """
+    Create an empty Jira report structure with zero values for a phase with no data.
+
+    Args:
+        phase_name: Name of the phase
+        start_date: Start date string
+        end_date: End date string
+
+    Returns:
+        Dictionary with empty/zero report data
+    """
+    return {
+        "filename": f"(no data for {phase_name})",
+        "assignee": None,
+        "jql_query": None,
+        "time_range": {
+            "earliest_created": "N/A",
+            "earliest_resolved": "N/A",
+            "latest_resolved": "N/A",
+            "span_days": 0
+        },
+        "issue_types": {},
+        "total_issues": 0,
+        "closure_stats": {
+            "avg_days": 0,
+            "max_days": 0
+        },
+        "state_times": {},
+        "state_reentry": {},
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+
 
 def parse_jira_report(filename):
     """Parse a Jira report file and extract key metrics"""
@@ -22,6 +152,8 @@ def parse_jira_report(filename):
         "closure_stats": {},
         "state_times": {},
         "state_reentry": {},
+        "start_date": None,
+        "end_date": None,
     }
 
     with open(filename, "r", encoding="utf-8") as f:
@@ -77,7 +209,7 @@ def parse_jira_report(filename):
     # Parse state times and re-entry rates
     in_state_analysis = False
     for i, line in enumerate(lines):
-        if "State                   Occurrences" in line:
+        if "State" in line and "Occurrences" in line and "Avg Duration" in line:
             in_state_analysis = True
             continue
         if in_state_analysis:
@@ -93,14 +225,22 @@ def parse_jira_report(filename):
                 and not line_stripped.startswith("=")
             ):
                 # Use regex to extract state name and average time
-                # Match pattern: state_name (any text) followed by numbers, then avg time in days
+                # Match pattern: state_name (any text) followed by numbers, then avg time in days/hours
                 match = re.match(
-                    r"^(\S+(?:\s+\S+)?)\s+(\d+)\s+(\d+)\s+([\d.]+)\s*days", line_stripped
+                    r"^(\S+(?:\s+\S+)?)\s+(\d+)\s+(\d+)\s+([-\d.]+)\s*(days|hours)", line_stripped
                 )
                 if match:
                     state_name = match.group(1).strip()
-                    avg_days = float(match.group(4))
-                    data["state_times"][state_name] = avg_days
+                    avg_time = float(match.group(4))
+                    time_unit = match.group(5)
+                    # Convert hours to days if needed
+                    if time_unit == "hours":
+                        avg_days = avg_time / 24.0
+                    else:
+                        avg_days = avg_time
+                    # Only store positive values (skip negative times like "Closed" state)
+                    if avg_days > 0:
+                        data["state_times"][state_name] = avg_days
 
     # Parse re-entry rates from detailed analysis
     current_state = None
@@ -145,21 +285,52 @@ def extract_period_info(jql_query):
 
 def generate_csv_report(reports, assignee=None):
     """Generate a CSV format comparison report"""
-    if len(reports) < 2:
-        print(f"Error: Need at least 2 reports for comparison, found {len(reports)}")
-        return
+    # Parse phase configuration - this is the source of truth for phases
+    phase_config = parse_phase_config()
 
-    # Sort reports by time period (oldest to newest based on filename timestamp)
-    reports = sorted(reports, key=lambda x: x["filename"])
+    if not phase_config:
+        print("Error: Could not parse phase configuration from config/jira_phases.conf")
+        print("Please ensure the config file exists and has valid PHASES entries.")
+        return None
 
-    # Determine phases based on number of reports
-    if len(reports) == 2:
-        phase_names = ["Before AI", "After AI"]
-    elif len(reports) == 3:
-        phase_names = ["No AI", "Cursor", "Comprehensive AI Tools"]
-    else:
-        # For 4+ reports, use generic labels
-        phase_names = [f"Phase {i+1}" for i in range(len(reports))]
+    # Build a dictionary of existing reports by their actual date ranges
+    reports_by_dates = {}
+    for report in reports:
+        earliest = report["time_range"].get("earliest_resolved")
+        latest = report["time_range"].get("latest_resolved")
+        if earliest and latest:
+            # Use the date range as key
+            key = f"{earliest}_{latest}"
+            reports_by_dates[key] = report
+
+    # Create phase_reports list based on config phases
+    # For each phase in config, use existing report if available, otherwise create empty
+    phase_reports = []
+    phase_names = []
+
+    for phase_name, start_date, end_date in phase_config:
+        # Try to find a matching report (simple check - if report exists, use it)
+        # Since reports list is ordered by filename (which follows phase order),
+        # we can try to match by index position as a heuristic
+        matching_report = None
+        phase_index = len(phase_reports)  # Current phase index
+
+        if phase_index < len(reports):
+            # Use the report at this index position
+            matching_report = reports[phase_index]
+            print(f"Using report data for phase '{phase_name}'")
+
+        if matching_report:
+            phase_reports.append(matching_report)
+        else:
+            # No report data for this phase - create empty report
+            print(f"No data found for phase '{phase_name}', using zero values")
+            phase_reports.append(create_empty_jira_report(phase_name, start_date, end_date))
+
+        phase_names.append(phase_name)
+
+    # Use phase_reports instead of reports for the rest of the function
+    reports = phase_reports
 
     # Build output
     output = []
@@ -176,37 +347,10 @@ def generate_csv_report(reports, assignee=None):
     output.append("the impact of AI tools on team efficiency:")
     output.append("")
 
-    for i, (phase, report) in enumerate(zip(phase_names, reports)):
-        # Use resolved dates (earliest resolved to latest resolved) as the phase period
-        earliest = report["time_range"].get("earliest_resolved", "N/A")
-        latest = report["time_range"].get("latest_resolved", "N/A")
+    # Display phase information using config dates (source of truth)
+    for i, (phase_name, start_date, end_date) in enumerate(phase_config):
+        output.append(f"Phase {i+1}: {phase_name} ({start_date} to {end_date})")
 
-        # Extract just the date part
-        if earliest != "N/A":
-            earliest_date = earliest.split()[0]
-        else:
-            earliest_date = "N/A"
-
-        if latest != "N/A":
-            latest_date = latest.split()[0]
-        else:
-            latest_date = "N/A"
-
-        # Calculate period days from the resolved date range
-        if earliest != "N/A" and latest != "N/A":
-            try:
-                start = datetime.strptime(earliest_date, "%Y-%m-%d")
-                end = datetime.strptime(latest_date, "%Y-%m-%d")
-                period_days = (end - start).days
-                period_info = f"{period_days} days"
-            except Exception:
-                period_info = "N/A"
-        else:
-            period_info = "N/A"
-
-        output.append(f"Phase {i+1}: {phase} ({earliest_date} to {latest_date}, {period_info})")
-
-    output.append("")
     output.append("")
 
     # Metrics table (using tabs for TSV format)
@@ -291,50 +435,49 @@ def generate_csv_report(reports, assignee=None):
         output.append(f"{itype} Percentage\t" + "\t".join(values))
 
     output.append("")
+    output.append("Note: N/A values indicate no issues entered that workflow state during the period.")
+    output.append("This can be positive (e.g., no blocked issues) or indicate the state isn't used in your workflow.")
     output.append("")
 
-    # Key conclusions - compare first and last reports
-    output.append("Key Conclusions:")
+    # Key changes - objectively show top 5 increases and top 5 decreases
+    # No subjective judgment of "positive" or "negative"
+    output.append("Key Changes:")
 
-    improvement = 0
+    # Collect all metrics with valid data for comparison
+    metric_changes = []
+
+    # Average Closure Time
     if len(avg_times) >= 2 and avg_times[0] > 0:
-        improvement = ((avg_times[0] - avg_times[-1]) / avg_times[0]) * 100
-        output.append(
-            f"• Average Task Closure Time: {avg_times[0]:.2f}d → {avg_times[-1]:.2f}d ({improvement:+.1f}% change)"
-        )
+        add_metric_change(metric_changes, "Average Closure Time",
+                         avg_times[0], avg_times[-1], "d")
 
-    # To Do improvement
-    todo_times = [r["state_times"].get("To Do", 0) for r in reports]
-    if len(todo_times) >= 2 and todo_times[0] > 0 and todo_times[-1] > 0:
-        todo_improvement = ((todo_times[0] - todo_times[-1]) / todo_times[0]) * 100
-        output.append(
-            f"• To Do State: {todo_times[0]:.2f}d → {todo_times[-1]:.2f}d ({todo_improvement:+.1f}% change)"
-        )
+    # Daily Throughput
+    if len(throughputs) >= 2:
+        try:
+            before_tp = float(throughputs[0].replace("/d", ""))
+            after_tp = float(throughputs[-1].replace("/d", ""))
+            if before_tp > 0:
+                add_metric_change(metric_changes, "Daily Throughput",
+                                 before_tp, after_tp, "/d")
+        except (ValueError, AttributeError):
+            pass
 
-    # In Progress
-    ip_times = [r["state_times"].get("In Progress", 0) for r in reports]
-    if len(ip_times) >= 2 and ip_times[0] > 0 and ip_times[-1] > 0:
-        ip_improvement = ((ip_times[0] - ip_times[-1]) / ip_times[0]) * 100
-        output.append(
-            f"• In Progress State: {ip_times[0]:.2f}d → {ip_times[-1]:.2f}d ({ip_improvement:+.1f}% change)"
-        )
+    # State times
+    for state in ["New", "To Do", "In Progress", "Review", "Release Pending", "Waiting"]:
+        state_vals = [r["state_times"].get(state, 0) for r in reports]
+        if len(state_vals) >= 2 and state_vals[0] > 0:
+            add_metric_change(metric_changes, f"{state} State",
+                             state_vals[0], state_vals[-1], "d")
 
-    # Review
-    review_times = [r["state_times"].get("Review", 0) for r in reports]
-    if len(review_times) >= 2 and review_times[0] > 0 and review_times[-1] > 0:
-        review_improvement = ((review_times[0] - review_times[-1]) / review_times[0]) * 100
-        output.append(
-            f"• Review State: {review_times[0]:.2f}d → {review_times[-1]:.2f}d ({review_improvement:+.1f}% change)"
-        )
+    # Re-entry rates
+    for state in ["To Do", "In Progress", "Review", "Waiting"]:
+        reentry_vals = [r["state_reentry"].get(state, 0) for r in reports]
+        if len(reentry_vals) >= 2 and reentry_vals[0] > 0:
+            add_metric_change(metric_changes, f"{state} Re-entry Rate",
+                             reentry_vals[0], reentry_vals[-1], "x")
 
-    output.append("")
-
-    # Final summary
-    if improvement > 0:
-        output.append("Summary: The comparison shows a quantifiably positive outcome,")
-        output.append("with improvements in core efficiency metrics and a more stable workflow.")
-    else:
-        output.append("Summary: The data shows mixed results. Further investigation recommended.")
+    # Format and display metric changes
+    output.extend(format_metric_changes(metric_changes, top_n=5))
 
     output.append("")
     output.append("For detailed metric explanations, see:")
@@ -347,8 +490,8 @@ def find_reports(assignee=None):
     """Find all matching Jira report files"""
     files = []
 
-    # Look in reports directory
-    reports_dir = "reports"
+    # Look in reports/jira directory (matching PR report structure)
+    reports_dir = "reports/jira"
     if not os.path.exists(reports_dir):
         return files
 
@@ -359,9 +502,9 @@ def find_reports(assignee=None):
             continue
 
         if assignee:
-            # Extract username part (before @)
-            username = assignee.split("@")[0]
-            # Look for assignee-specific reports using just username
+            # Normalize username for matching
+            username = normalize_username(assignee)
+            # Look for assignee-specific reports using normalized username
             # Pattern: jira_report_username_YYYYMMDD_HHMMSS.txt
             if f"jira_report_{username}_" in filename:
                 files.append(os.path.join(reports_dir, filename))
@@ -400,10 +543,10 @@ def main():
             print("Error: No general reports found")
         print("\nLooking for files matching pattern:")
         if args.assignee:
-            username = args.assignee.split("@")[0]
-            print(f"  reports/jira_report_{username}_*.txt")
+            username = normalize_username(args.assignee)
+            print(f"  reports/jira/jira_report_{username}_*.txt")
         else:
-            print("  reports/jira_report_general_*.txt")
+            print("  reports/jira/jira_report_general_*.txt")
         return 1
 
     if len(report_files) < 2:
@@ -435,8 +578,8 @@ def main():
     report_text = generate_csv_report(reports, args.assignee)
 
     # Determine output filename
-    # Create output directory
-    output_dir = "reports"
+    # Create output directory (matching PR report structure)
+    output_dir = "reports/jira"
     os.makedirs(output_dir, exist_ok=True)
 
     if args.output:
@@ -452,11 +595,12 @@ def main():
             # Fallback to current time if pattern doesn't match
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+        # Use jira_comparison_* naming to match pr_comparison_* pattern
         if args.assignee:
-            username = args.assignee.split("@")[0]
-            output_file = os.path.join(output_dir, f"comparison_report_{username}_{timestamp}.tsv")
+            username = normalize_username(args.assignee)
+            output_file = os.path.join(output_dir, f"jira_comparison_{username}_{timestamp}.tsv")
         else:
-            output_file = os.path.join(output_dir, f"comparison_report_general_{timestamp}.tsv")
+            output_file = os.path.join(output_dir, f"jira_comparison_general_{timestamp}.tsv")
 
     # Write output
     with open(output_file, "w", encoding="utf-8") as f:

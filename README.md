@@ -456,6 +456,85 @@ GitHub PR reports analyze pull request activity and review efficiency. Below are
 
 This section explains Jira issue metrics and how they're calculated.
 
+#### Understanding Phase Dates
+
+**IMPORTANT**: The phase dates shown in comparison reports are calculated from **actual resolved issue data**, not from the configuration file.
+
+**Why phase dates differ between reports:**
+
+- **Configuration file** (`config/jira_phases.conf`): Defines the **query window** for fetching Jira issues
+  ```bash
+  PHASES=(
+      "No AI Period|2024-10-24|2025-05-30"   # Query filter dates
+      "Cursor Period|2025-06-02|2025-07-31"
+      "Full AI Period|2025-08-01|2025-11-03"
+  )
+  ```
+
+- **Report dates**: Use the **earliest and latest resolved dates** from actual Jira data
+  - For each person/team, shows when their **first** and **last** issues were actually resolved
+  - Calculated as: `(Latest Resolved Date) - (Earliest Resolved Date)`
+
+**Example from actual reports:**
+
+For "No AI Period" (configured as 2024-10-24 to 2025-05-30):
+- **Team Overall**: `2024-10-24 to 2025-05-29` (217 days)
+  - First issue resolved by anyone: Oct 24
+  - Last issue resolved: May 29
+
+- **User A**: `2024-10-31 to 2025-05-29` (210 days)
+  - User A's first resolved issue: Oct 31 (7 days after team start)
+  - Last resolved: May 29
+
+- **User B**: `2024-12-04 to 2025-05-16` (163 days)
+  - User B's first resolved issue: Dec 4 (much later)
+  - Last resolved: May 16 (earlier than others)
+
+**Why this is better:**
+- More accurate than using fixed config dates
+- Reflects each person's actual working period
+- Accounts for vacations, onboarding, project assignments, etc.
+- Fair comparison based on real activity, not arbitrary boundaries
+
+**Implementation:** See `generate_jira_comparison_report.py:188-209` for the calculation logic.
+
+#### Understanding N/A Values in Reports
+
+**N/A (Not Applicable)** appears in reports when data is unavailable or not applicable for a specific metric:
+
+**When N/A appears:**
+
+1. **State Time Metrics** (e.g., "Waiting State Avg Time: N/A")
+   - **Meaning**: No issues entered this workflow state during the period
+   - **Example**: If "Waiting State Avg Time" shows N/A, it means zero issues were blocked/waiting
+   - **Interpretation**: Could be positive (smooth workflow, no blockers) or simply mean that state isn't used in your workflow
+
+2. **Re-entry Rate Metrics** (e.g., "Waiting Re-entry Rate: N/A")
+   - **Meaning**: No issues re-entered this state (rate would be 0.00x)
+   - **Example**: If "Review Re-entry Rate" shows N/A, all reviews passed on first attempt
+   - **Interpretation**: Generally positive - indicates no rework in that state
+
+3. **Period Information** (e.g., "Analysis Period: N/A")
+   - **Meaning**: Date information is missing or couldn't be calculated
+   - **Rare occurrence**: Usually indicates data quality issues in Jira
+
+4. **Throughput Metrics** (e.g., "Daily Throughput: N/A")
+   - **Meaning**: Period days couldn't be calculated, so throughput can't be computed
+   - **Depends on**: Valid date range being available
+
+**Comparing N/A across phases:**
+
+| Metric | Phase 1 | Phase 2 | Phase 3 | Interpretation |
+|--------|---------|---------|---------|----------------|
+| Waiting State | 30.77d | N/A | N/A | Workflow improved - no blocking issues in later phases |
+| Review Re-entry | 1.13x | N/A | N/A | Code quality improved - reviews pass first time |
+| Waiting Re-entry | 1.24x | 1.33x | N/A | Further improvement in Phase 3 - no blocked issues |
+
+**Best practices:**
+- **Don't ignore N/A** - it often indicates positive workflow improvements
+- **Compare across phases** - N/A appearing in later phases may show AI tool benefits
+- **Context matters** - N/A for "Waiting" is good; N/A for core states like "In Progress" would be concerning
+
 #### Basic Metrics
 
 **Analysis Period**

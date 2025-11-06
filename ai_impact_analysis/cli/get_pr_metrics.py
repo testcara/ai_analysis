@@ -12,6 +12,7 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ai_impact_analysis.github_client import GitHubClient
+from ai_impact_analysis.github_client_graphql import GitHubGraphQLClient
 from ai_impact_analysis.logger import logger
 
 
@@ -260,6 +261,32 @@ Examples:
     parser.add_argument(
         "--output", type=str, help="Output JSON file path (default: auto-generated)"
     )
+    parser.add_argument(
+        "--use-graphql",
+        action="store_true",
+        default=True,
+        help="Use GraphQL API (faster, default: True)",
+    )
+    parser.add_argument(
+        "--use-rest",
+        action="store_true",
+        help="Use REST API (legacy mode, slower)",
+    )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Disable caching (GraphQL only)",
+    )
+    parser.add_argument(
+        "--clear-cache",
+        action="store_true",
+        help="Clear cache before fetching (GraphQL only)",
+    )
+    parser.add_argument(
+        "--incremental",
+        action="store_true",
+        help="Incremental mode: only fetch PRs updated since last run (GraphQL only)",
+    )
 
     args = parser.parse_args()
 
@@ -276,9 +303,30 @@ Examples:
     if args.author:
         print(f"Author: {args.author}")
 
+    # Determine which client to use
+    use_rest = args.use_rest
+    use_graphql = not use_rest  # Default to GraphQL unless REST is specified
+
+    if use_rest:
+        print("🔄 Using REST API (legacy mode)")
+    else:
+        print("⚡ Using GraphQL API (optimized mode)")
+        if not args.no_cache:
+            print("💾 Caching enabled")
+        if args.incremental:
+            print("📈 Incremental mode enabled")
+
     # Initialize GitHub client
     try:
-        client = GitHubClient()
+        if use_graphql:
+            client = GitHubGraphQLClient()
+
+            # Clear cache if requested
+            if args.clear_cache:
+                print("\n🗑️  Clearing cache...")
+                client.clear_cache()
+        else:
+            client = GitHubClient()
     except ValueError as e:
         print(f"\nError: {e}")
         print("\nPlease set the following environment variables:")
@@ -290,57 +338,75 @@ Examples:
     # Fetch merged PRs
     print("\n📥 Fetching merged PRs...")
     try:
-        prs = client.fetch_merged_prs(args.start, args.end)
+        if use_graphql:
+            # GraphQL client returns metrics directly (no need for second processing step)
+            prs_with_metrics = client.fetch_merged_prs_graphql(
+                args.start,
+                args.end,
+                author=args.author,
+                use_cache=not args.no_cache,
+                incremental=args.incremental,
+            )
+            print(f"✓ Fetched and analyzed {len(prs_with_metrics)} PRs")
+        else:
+            # REST API: fetch PRs first, then analyze each one
+            prs = client.fetch_merged_prs(args.start, args.end)
+
+            # Filter by author if specified
+            if args.author:
+                prs = [pr for pr in prs if pr["user"]["login"] == args.author]
+                print(f"✓ Filtered to {len(prs)} PRs by author '{args.author}'")
+
+            if not prs:
+                print("\n⚠ No merged PRs found for the specified period")
+                return 0
+
+            # Get detailed metrics for each PR (with concurrent processing)
+            print(f"\n📈 Analyzing {len(prs)} PRs (using concurrent processing)...")
+            prs_with_metrics = []
+
+            def analyze_single_pr(pr):
+                """Analyze a single PR with error handling."""
+                try:
+                    return client.get_pr_detailed_metrics(pr)
+                except Exception as e:
+                    logger.error(f"Error analyzing PR #{pr['number']}: {e}")
+                    return None
+
+            # Use ThreadPoolExecutor for concurrent processing
+            # Limit workers to avoid rate limiting
+            max_workers = min(10, len(prs))
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all PR analysis tasks
+                future_to_pr = {executor.submit(analyze_single_pr, pr): pr for pr in prs}
+
+                # Process completed tasks as they finish
+                completed = 0
+                for future in as_completed(future_to_pr):
+                    pr = future_to_pr[future]
+                    completed += 1
+
+                    try:
+                        metrics = future.result()
+                        if metrics:
+                            prs_with_metrics.append(metrics)
+                            print(f"  ✓ [{completed}/{len(prs)}] PR #{pr['number']}: {pr['title'][:60]}")
+                        else:
+                            print(f"  ✗ [{completed}/{len(prs)}] PR #{pr['number']}: Failed to analyze")
+                    except Exception as e:
+                        print(f"  ✗ [{completed}/{len(prs)}] PR #{pr['number']}: {e}")
+
+            print(f"\n✓ Successfully analyzed {len(prs_with_metrics)}/{len(prs)} PRs")
     except Exception as e:
         print(f"Error fetching PRs: {e}")
+        import traceback
+        traceback.print_exc()
         return 1
 
-    # Filter by author if specified
-    if args.author:
-        prs = [pr for pr in prs if pr["user"]["login"] == args.author]
-        print(f"✓ Filtered to {len(prs)} PRs by author '{args.author}'")
-
-    if not prs:
+    if not prs_with_metrics:
         print("\n⚠ No merged PRs found for the specified period")
         return 0
-
-    # Get detailed metrics for each PR (with concurrent processing)
-    print(f"\n📈 Analyzing {len(prs)} PRs (using concurrent processing)...")
-    prs_with_metrics = []
-
-    def analyze_single_pr(pr):
-        """Analyze a single PR with error handling."""
-        try:
-            return client.get_pr_detailed_metrics(pr)
-        except Exception as e:
-            logger.error(f"Error analyzing PR #{pr['number']}: {e}")
-            return None
-
-    # Use ThreadPoolExecutor for concurrent processing
-    # Limit workers to avoid rate limiting (GitHub allows ~5000 requests/hour)
-    max_workers = min(10, len(prs))  # Use up to 10 concurrent workers
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all PR analysis tasks
-        future_to_pr = {executor.submit(analyze_single_pr, pr): pr for pr in prs}
-
-        # Process completed tasks as they finish
-        completed = 0
-        for future in as_completed(future_to_pr):
-            pr = future_to_pr[future]
-            completed += 1
-
-            try:
-                metrics = future.result()
-                if metrics:
-                    prs_with_metrics.append(metrics)
-                    print(f"  ✓ [{completed}/{len(prs)}] PR #{pr['number']}: {pr['title'][:60]}")
-                else:
-                    print(f"  ✗ [{completed}/{len(prs)}] PR #{pr['number']}: Failed to analyze")
-            except Exception as e:
-                print(f"  ✗ [{completed}/{len(prs)}] PR #{pr['number']}: {e}")
-
-    print(f"\n✓ Successfully analyzed {len(prs_with_metrics)}/{len(prs)} PRs")
 
     # Calculate statistics
     print("\n📊 Calculating statistics...")
@@ -364,16 +430,19 @@ Examples:
     os.makedirs(output_dir, exist_ok=True)
 
     # Determine output filename
+    # Use date range in filename to avoid overwriting when running multiple phases quickly
+    date_range = f"{args.start}_{args.end}".replace("-", "")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     if args.output:
         json_file = args.output
     else:
         if args.author:
-            json_file = f"{output_dir}/pr_metrics_{args.author}_{timestamp}.json"
-            txt_file = f"{output_dir}/pr_report_{args.author}_{timestamp}.txt"
+            json_file = f"{output_dir}/pr_metrics_{args.author}_{date_range}.json"
+            txt_file = f"{output_dir}/pr_report_{args.author}_{date_range}.txt"
         else:
-            json_file = f"{output_dir}/pr_metrics_general_{timestamp}.json"
-            txt_file = f"{output_dir}/pr_report_general_{timestamp}.txt"
+            json_file = f"{output_dir}/pr_metrics_general_{date_range}.json"
+            txt_file = f"{output_dir}/pr_report_general_{date_range}.txt"
 
     # Save JSON output
     with open(json_file, "w", encoding="utf-8") as f:

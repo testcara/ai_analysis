@@ -4,6 +4,8 @@ import argparse
 import os
 from datetime import datetime
 
+from ai_impact_analysis.report_utils import normalize_username
+
 # --- Configuration (read from environment variables) ---
 JIRA_URL = os.getenv("JIRA_URL", "https://issues.redhat.com")
 JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")
@@ -176,6 +178,12 @@ parser.add_argument("--project", type=str, help="Project key (overrides PROJECT_
 parser.add_argument(
     "--assignee", type=str, help="Specify assignee (username or email)", default=None
 )
+parser.add_argument(
+    "--limit-team-members",
+    type=str,
+    help="Path to team members config file. When set without --assignee, limits team report to only these members",
+    default=None,
+)
 
 args = parser.parse_args()
 
@@ -218,6 +226,34 @@ jql_parts = [f'project = "{project_key}"']
 if args.assignee:
     jql_parts.append(f'assignee = "{args.assignee}"')
     print(f"Filtering by assignee: {args.assignee}")
+elif args.limit_team_members:
+    # Load team members from config file and build OR query
+    team_members = []
+    try:
+        with open(args.limit_team_members, 'r') as f:
+            for line in f:
+                line = line.strip()
+                # Skip empty lines and comments
+                if line and not line.startswith('#'):
+                    # Remove trailing comma if present
+                    member = line.rstrip(',').strip()
+                    if member:
+                        team_members.append(member)
+
+        if team_members:
+            # Build OR query: (assignee = "user1" OR assignee = "user2" OR ...)
+            assignee_conditions = ' OR '.join([f'assignee = "{member}"' for member in team_members])
+            jql_parts.append(f'({assignee_conditions})')
+            print(f"Limiting to team members from config: {len(team_members)} members")
+            print(f"Team members: {', '.join(team_members)}")
+        else:
+            print("Warning: No team members found in config file, querying all issues")
+    except FileNotFoundError:
+        print(f"Warning: Team members file not found: {args.limit_team_members}")
+        print("Continuing without team member filter")
+    except Exception as e:
+        print(f"Warning: Error reading team members file: {e}")
+        print("Continuing without team member filter")
 
 # Use resolved field (resolution date) to filter completed tasks
 # Note: If resolved date filter is specified, no need to specify status, as issues with resolved dates are already resolved
@@ -424,12 +460,13 @@ if total_issues > 0:
     # Create output directory
     import os
 
-    output_dir = "reports"
+    # Match PR report structure: reports/jira/ (like reports/github/)
+    output_dir = "reports/jira"
     os.makedirs(output_dir, exist_ok=True)
 
     if args.assignee:
-        # Use only username part (before @) as filename
-        username = args.assignee.split("@")[0]
+        # Normalize username for filename
+        username = normalize_username(args.assignee)
         report_filename = os.path.join(
             output_dir, f'jira_report_{username}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt'
         )
@@ -446,6 +483,79 @@ if total_issues > 0:
         print(f"\nError saving report: {e}")
 else:
     print("No issues found matching the criteria.")
+
+    # Generate report with N/A values for 0 issues
+    report_lines = []
+    report_lines.append("=" * 100)
+    if args.assignee:
+        report_lines.append(f"JIRA Data Analysis Report - {args.assignee}")
+    else:
+        report_lines.append("JIRA Data Analysis Report")
+    report_lines.append("=" * 100)
+    report_lines.append(f"\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    report_lines.append(f"Project: {project_key}")
+    if args.assignee:
+        report_lines.append(f"Assignee: {args.assignee}")
+    report_lines.append(f"JQL Query: {JQL_DONE_ISSUES}\n")
+
+    # Data Time Range
+    report_lines.append("\n--- Data Time Range ---")
+    report_lines.append("Earliest Created: N/A")
+    report_lines.append("Latest Created: N/A")
+    report_lines.append("Earliest Resolved: N/A")
+    report_lines.append("Latest Resolved: N/A")
+    report_lines.append("Data Span: 0 days")
+
+    # Issue type statistics
+    report_lines.append("\n--- Issue Type Statistics ---")
+    report_lines.append("Total: 0 issues")
+
+    # Task Closure Time Statistics
+    report_lines.append("\n--- Task Closure Time Statistics ---")
+    report_lines.append("Successfully analyzed issues: 0")
+    report_lines.append("Average Closure Time: N/A")
+    report_lines.append("Shortest Closure Time: N/A")
+    report_lines.append("Longest Closure Time: N/A")
+
+    # State Duration Analysis
+    report_lines.append("\n--- State Duration Analysis ---")
+    report_lines.append("\nAnalyzed 0 issues state transitions")
+    report_lines.append(
+        f"\n{'State':<20} {'Occurrences':<12} {'Issues Affected':<15} {'Avg Duration':<20} {'Total Duration':<20}"
+    )
+    report_lines.append("=" * 100)
+    report_lines.append("(No state data available)")
+
+    # Detailed State Analysis
+    report_lines.append("\n--- Detailed State Analysis ---")
+    report_lines.append("\n(No detailed state data available - 0 issues analyzed)")
+
+    # Print to console
+    for line in report_lines:
+        print(line)
+
+    # Save report to text file
+    import os
+
+    output_dir = "reports/jira"
+    os.makedirs(output_dir, exist_ok=True)
+
+    if args.assignee:
+        username = normalize_username(args.assignee)
+        report_filename = os.path.join(
+            output_dir, f'jira_report_{username}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt'
+        )
+    else:
+        report_filename = os.path.join(
+            output_dir, f'jira_report_general_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt'
+        )
+
+    try:
+        with open(report_filename, "w", encoding="utf-8") as f:
+            f.write("\n".join(report_lines))
+        print(f"\nReport saved to: {report_filename}")
+    except Exception as e:
+        print(f"\nError saving report: {e}")
 
 # --- Example: Calculate Velocity (requires extraction from Sprint data, may need specific Jira Software API endpoints) ---
 # Velocity retrieval typically requires specific Jira Software API, more complex than general search, may need specific permissions.
@@ -545,12 +655,23 @@ try:
                 "avg_transitions_per_issue": stats["total_count"] / stats["issue_count"],
             }
 
-    # Create output directory for JSON files
-    json_output_dir = "tmp/original_json_output"
+    # Create output directory for JSON files (matching PR report structure)
+    json_output_dir = "reports/jira"
     os.makedirs(json_output_dir, exist_ok=True)
 
+    # Build filename with assignee and date range (matching pr_metrics_* pattern)
+    # Format dates from YYYY-MM-DD to YYYYMMDD
+    start_formatted = args.start.replace("-", "")
+    end_formatted = args.end.replace("-", "")
+
+    if args.assignee:
+        # Normalize username for identifier
+        identifier = normalize_username(args.assignee)
+    else:
+        identifier = "general"
+
     output_filename = os.path.join(
-        json_output_dir, f'jira_analysis_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        json_output_dir, f'jira_metrics_{identifier}_{start_formatted}_{end_formatted}.json'
     )
     with open(output_filename, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)

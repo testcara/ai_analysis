@@ -19,6 +19,12 @@ import re
 import argparse
 from datetime import datetime
 
+from ai_impact_analysis.report_utils import (
+    calculate_percentage_change,
+    format_metric_changes,
+    add_metric_change
+)
+
 
 def parse_phase_config(config_path="config/github_phases.conf"):
     """
@@ -221,6 +227,48 @@ def parse_pr_report(filename):
     }
 
 
+def create_empty_report(phase_name, start_date, end_date):
+    """
+    Create an empty report structure with zero values for a phase with no data.
+
+    Args:
+        phase_name: Name of the phase
+        start_date: Start date string
+        end_date: End date string
+
+    Returns:
+        Dictionary with empty/zero report data
+    """
+    return {
+        "filename": f"(no data for {phase_name})",
+        "start_date": start_date,
+        "end_date": end_date,
+        "total_prs": 0,
+        "ai_prs": 0,
+        "non_ai_prs": 0,
+        "ai_adoption_rate": 0,
+        "claude_prs": 0,
+        "cursor_prs": 0,
+        "ai_stats": {},
+        "non_ai_stats": {},
+        "overall_metrics": {
+            "avg_time_to_merge_days": 0,
+            "avg_time_to_first_review_hours": 0,
+            "avg_changes_requested": 0,
+            "avg_commits": 0,
+            "avg_reviewers": 0,
+            "avg_comments": 0,
+            "avg_additions": 0,
+            "avg_deletions": 0,
+            "avg_files_changed": 0,
+            "avg_human_reviewers": 0,
+            "avg_human_comments": 0,
+            "avg_human_substantive_comments": 0,
+        },
+        "comparison": {},
+    }
+
+
 def generate_tsv_report(reports, author=None):
     """
     Generate TSV format comparison report.
@@ -232,13 +280,6 @@ def generate_tsv_report(reports, author=None):
     Returns:
         String report in TSV format
     """
-    if len(reports) < 2:
-        print(f"Error: Need at least 2 reports for comparison, found {len(reports)}")
-        return None
-
-    # Sort reports by date
-    reports = sorted(reports, key=lambda x: x["start_date"])
-
     # Parse phase configuration
     phase_config = parse_phase_config()
 
@@ -247,20 +288,29 @@ def generate_tsv_report(reports, author=None):
         print("Please ensure the config file exists and has valid GITHUB_PHASES entries.")
         return None
 
-    # Determine phase names from config
+    # Create a report for each phase from config, using existing reports or creating empty ones
+    phase_reports = []
     phase_names = []
-    for i, report in enumerate(reports):
-        phase_name = get_phase_name_for_report(report, phase_config)
-        if not phase_name:
-            print(f"Error: No matching phase found in config for report {i+1}")
-            print(f"  Report dates: {report['start_date']} to {report['end_date']}")
-            print(f"  Report file: {report['filename']}")
-            print("\nAvailable phases in config:")
-            for name, start, end in phase_config:
-                print(f"  - {name}: {start} to {end}")
-            print("\nPlease ensure report dates match phase dates in config/github_phases.conf")
-            return None
+
+    for phase_name, start_date, end_date in phase_config:
+        # Try to find an existing report for this phase
+        matching_report = None
+        for report in reports:
+            if report["start_date"] == start_date and report["end_date"] == end_date:
+                matching_report = report
+                break
+
+        if matching_report:
+            phase_reports.append(matching_report)
+        else:
+            # No data for this phase, create empty report
+            print(f"Note: No data found for phase '{phase_name}', using zero values")
+            phase_reports.append(create_empty_report(phase_name, start_date, end_date))
+
         phase_names.append(phase_name)
+
+    # Use phase_reports instead of reports for the rest of the function
+    reports = phase_reports
 
     output = []
 
@@ -340,98 +390,123 @@ def generate_tsv_report(reports, author=None):
 
     output.append("")
     output.append("")
-    output.append("")
-    output.append("")
-    output.append("")
 
-    # Key trends based on metrics shown in the table above
-    output.append("Key Trends:")
-    output.append("")
+    # Key changes - objectively show top 5 increases and top 5 decreases
+    # No subjective judgment of "positive" or "negative"
+    output.append("Key Changes:")
 
-    # AI adoption trend
+    # Collect all metrics with valid data for comparison
+    metric_changes = []
+
+    # AI Adoption - special handling for 0% baseline
     if len(ai_adoption) >= 2:
-        adoption_change = ai_adoption[-1] - ai_adoption[0]
-        output.append(
-            f"AI Adoption: {ai_adoption[0]:.1f}% → {ai_adoption[-1]:.1f}% ({adoption_change:+.1f}% change)"
-        )
+        if ai_adoption[0] == 0:
+            # When starting from 0%, show absolute change instead of percentage
+            add_metric_change(metric_changes, "AI Adoption Rate",
+                             ai_adoption[0], ai_adoption[-1], "%", is_absolute=True)
+        elif ai_adoption[0] > 0:
+            add_metric_change(metric_changes, "AI Adoption Rate",
+                             ai_adoption[0], ai_adoption[-1], "%")
 
-    # Overall merge time trend
+    # All other metrics - use consistent formula: (after - before) / before * 100
+    # Positive % = increase, Negative % = decrease
+
+    # Merge time
     merge_times = [
         r["overall_metrics"].get("avg_time_to_merge_days", 0)
         for r in reports
         if r["overall_metrics"]
     ]
-    if len(merge_times) >= 2:
-        first_merge = merge_times[0]
-        last_merge = merge_times[-1]
-        merge_change = ((last_merge - first_merge) / first_merge * 100) if first_merge > 0 else 0
-        output.append(
-            f"Avg Time to Merge: {first_merge:.2f}d → {last_merge:.2f}d ({merge_change:+.1f}% change)"
-        )
+    if len(merge_times) >= 2 and merge_times[0] > 0:
+        add_metric_change(metric_changes, "Avg Time to Merge",
+                         merge_times[0], merge_times[-1], "d")
 
-    # Review speed trend
+    # Review time
     review_times = [
         r["overall_metrics"].get("avg_time_to_first_review_hours", 0)
         for r in reports
         if r["overall_metrics"]
     ]
-    if len(review_times) >= 2:
-        first_review = review_times[0]
-        last_review = review_times[-1]
-        review_change = (
-            ((last_review - first_review) / first_review * 100) if first_review > 0 else 0
-        )
-        output.append(
-            f"Avg Time to First Review: {first_review:.2f}h → {last_review:.2f}h ({review_change:+.1f}% change)"
-        )
+    if len(review_times) >= 2 and review_times[0] > 0:
+        add_metric_change(metric_changes, "Avg Time to First Review",
+                         review_times[0], review_times[-1], "h")
 
-    # Human reviewers trend
-    human_reviewers = [
-        r["overall_metrics"].get("avg_human_reviewers", 0) for r in reports if r["overall_metrics"]
+    # Changes requested
+    changes_requested = [
+        r["overall_metrics"].get("avg_changes_requested", 0)
+        for r in reports
+        if r["overall_metrics"]
     ]
-    if len(human_reviewers) >= 2:
-        reviewer_change = (
-            ((human_reviewers[-1] - human_reviewers[0]) / human_reviewers[0] * 100)
-            if human_reviewers[0] > 0
-            else 0
-        )
-        output.append(
-            f"Avg Reviewers (excl. bots): {human_reviewers[0]:.2f} → {human_reviewers[-1]:.2f} ({reviewer_change:+.1f}% change)"
-        )
+    if len(changes_requested) >= 2 and changes_requested[0] > 0:
+        add_metric_change(metric_changes, "Avg Changes Requested",
+                         changes_requested[0], changes_requested[-1], "")
 
-    # Human substantive comments trend
+    # Commits per PR
+    commits = [
+        r["overall_metrics"].get("avg_commits", 0)
+        for r in reports
+        if r["overall_metrics"]
+    ]
+    if len(commits) >= 2 and commits[0] > 0:
+        add_metric_change(metric_changes, "Avg Commits per PR",
+                         commits[0], commits[-1], "")
+
+    # Human reviewers
+    human_reviewers = [
+        r["overall_metrics"].get("avg_human_reviewers", 0)
+        for r in reports
+        if r["overall_metrics"]
+    ]
+    if len(human_reviewers) >= 2 and human_reviewers[0] > 0:
+        add_metric_change(metric_changes, "Avg Reviewers (excl. bots)",
+                         human_reviewers[0], human_reviewers[-1], "")
+
+    # Human substantive comments
     human_comments = [
         r["overall_metrics"].get("avg_human_substantive_comments", 0)
         for r in reports
         if r["overall_metrics"]
     ]
-    if len(human_comments) >= 2:
-        comment_change = (
-            ((human_comments[-1] - human_comments[0]) / human_comments[0] * 100)
-            if human_comments[0] > 0
-            else 0
-        )
-        output.append(
-            f"Avg Comments (excl. bots & approvals): {human_comments[0]:.2f} → {human_comments[-1]:.2f} ({comment_change:+.1f}% change)"
-        )
+    if len(human_comments) >= 2 and human_comments[0] > 0:
+        add_metric_change(metric_changes, "Avg Comments (excl. bots & approvals)",
+                         human_comments[0], human_comments[-1], "")
+
+    # Lines added
+    additions = [
+        r["overall_metrics"].get("avg_additions", 0)
+        for r in reports
+        if r["overall_metrics"]
+    ]
+    if len(additions) >= 2 and additions[0] > 0:
+        add_metric_change(metric_changes, "Avg Lines Added",
+                         additions[0], additions[-1], "")
+
+    # Lines deleted
+    deletions = [
+        r["overall_metrics"].get("avg_deletions", 0)
+        for r in reports
+        if r["overall_metrics"]
+    ]
+    if len(deletions) >= 2 and deletions[0] > 0:
+        add_metric_change(metric_changes, "Avg Lines Deleted",
+                         deletions[0], deletions[-1], "")
+
+    # Files changed
+    files = [
+        r["overall_metrics"].get("avg_files_changed", 0)
+        for r in reports
+        if r["overall_metrics"]
+    ]
+    if len(files) >= 2 and files[0] > 0:
+        add_metric_change(metric_changes, "Avg Files Changed",
+                         files[0], files[-1], "")
+
+    # Format and display metric changes
+    output.extend(format_metric_changes(metric_changes, top_n=5))
 
     output.append("")
     output.append("For detailed metric explanations, see:")
-    output.append("https://github.com/testcara/ai_impact_analysis#understanding-report-metrics")
-    output.append("")
-
-    # Summary based on trends
-    output.append("Summary:")
-    if len(merge_times) >= 2:
-        productivity_improved = merge_times[-1] < merge_times[0]
-        if ai_adoption[-1] > 50:
-            output.append(f"Strong AI adoption ({ai_adoption[-1]:.1f}% of PRs).")
-            if productivity_improved:
-                output.append("Merge times trending downward - positive productivity signal.")
-        elif ai_adoption[-1] > 20:
-            output.append(f"Moderate AI adoption ({ai_adoption[-1]:.1f}% of PRs).")
-        else:
-            output.append(f"Early stage AI adoption ({ai_adoption[-1]:.1f}% of PRs).")
+    output.append("https://github.com/testcara/ai_impact_analysis#github-pr-report-metrics")
 
     return "\n".join(output)
 

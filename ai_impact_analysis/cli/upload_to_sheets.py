@@ -5,8 +5,9 @@ Upload Jira comparison reports to Google Sheets.
 This script uploads TSV/CSV comparison reports to Google Sheets for easy sharing and visualization.
 
 Usage:
-    python3 bin/upload_to_sheets.py --report reports/comparison_report_wlin_*.tsv
-    python3 bin/upload_to_sheets.py --report reports/comparison_report_general_*.tsv --sheet-name "Team Report"
+    python3 bin/upload_to_sheets.py --report reports/jira/jira_comparison_wlin_*.tsv
+    python3 bin/upload_to_sheets.py --report reports/jira/jira_comparison_general_*.tsv --sheet-name "Team Report"
+    python3 bin/upload_to_sheets.py --report reports/github/pr_comparison_wlin_*.tsv
 
 Requirements:
     pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
@@ -329,20 +330,20 @@ def main():
         epilog="""
 Examples:
   # First time: Upload to new spreadsheet (creates new file)
-  python3 bin/upload_to_sheets.py --report reports/comparison_report_wlin_20251022.tsv
+  python3 bin/upload_to_sheets.py --report reports/jira/jira_comparison_wlin_20251022.tsv
   # Output will show: Spreadsheet ID: 1ABCdef...
 
   # Set environment variable for subsequent uploads
   export GOOGLE_SPREADSHEET_ID="1ABCdef..."
 
   # Future uploads: automatically append to same spreadsheet
-  python3 bin/upload_to_sheets.py --report reports/comparison_report_wlin_20251024.tsv
+  python3 bin/upload_to_sheets.py --report reports/jira/jira_comparison_wlin_20251024.tsv
 
   # Override env var with specific spreadsheet ID
-  python3 bin/upload_to_sheets.py --report report.tsv --spreadsheet-id "1XYZ..."
+  python3 bin/upload_to_sheets.py --report reports/github/pr_comparison_wlin.tsv --spreadsheet-id "1XYZ..."
 
   # Upload with custom sheet name
-  python3 bin/upload_to_sheets.py --report reports/comparison_report_general.tsv --sheet-name "Team Report"
+  python3 bin/upload_to_sheets.py --report reports/jira/jira_comparison_general.tsv --sheet-name "Team Report"
 
 Environment Variables:
   GOOGLE_CREDENTIALS_FILE - Path to Google credentials JSON file
@@ -386,27 +387,63 @@ Note:
         print(f"Error: Report file not found: {args.report}")
         sys.exit(1)
 
+    # Helper function to normalize username
+    def normalize_username(username):
+        """
+        Normalize username by removing common prefixes/suffixes:
+        - Remove @redhat.com, @gmail.com, etc.
+        - Remove rh-ee- prefix
+        - Remove -1, -2, etc. suffix
+        """
+        # Remove email domain
+        username = username.split("@")[0]
+        # Remove rh-ee- prefix
+        if username.startswith("rh-ee-"):
+            username = username[6:]  # len("rh-ee-") = 6
+        # Remove -1, -2, etc. suffix
+        import re
+        username = re.sub(r'-\d+$', '', username)
+        return username
+
     # Derive sheet name from filename if not provided
     if not args.sheet_name:
         filename = Path(args.report).stem
         # Remove timestamp from filename for cleaner name
-        # e.g., "comparison_report_wlin_20251022_111614" -> "Jira Report - wlin"
+        # e.g., "jira_comparison_wlin_20251022_111614" -> "Jira Report - wlin"
         # e.g., "pr_comparison_wlin_20251022_111614" -> "PR Report - wlin"
+        # e.g., "combined_pr_report_20251022_111614" -> "PR Report - Combined"
+        # e.g., "combined_jira_report_20251022_111614" -> "Jira Report - Combined"
 
-        # Check if it's a PR report
-        if filename.startswith("pr_comparison_"):
+        # Check if it's a combined PR report
+        if filename.startswith("combined_pr_report"):
+            args.sheet_name = "PR Report - Combined"
+        # Check if it's a combined Jira report
+        elif filename.startswith("combined_jira_report"):
+            args.sheet_name = "Jira Report - Combined"
+        # Check if it's a PR comparison report
+        elif filename.startswith("pr_comparison_"):
             parts = filename.replace("pr_comparison_", "").split("_")
             if parts[0] == "general":
                 args.sheet_name = "PR Report - Team"
             else:
-                args.sheet_name = f"PR Report - {parts[0]}"
-        # Otherwise it's a Jira report
+                normalized = normalize_username(parts[0])
+                args.sheet_name = f"PR Report - {normalized}"
+        # Check if it's a Jira comparison report
+        elif filename.startswith("jira_comparison_"):
+            parts = filename.replace("jira_comparison_", "").split("_")
+            if parts[0] == "general":
+                args.sheet_name = "Jira Report - Team"
+            else:
+                normalized = normalize_username(parts[0])
+                args.sheet_name = f"Jira Report - {normalized}"
+        # Fallback for old comparison_report_* naming (for backwards compatibility)
         else:
             parts = filename.replace("comparison_report_", "").split("_")
             if parts[0] == "general":
                 args.sheet_name = "Jira Report - Team"
             else:
-                args.sheet_name = f"Jira Report - {parts[0]}"
+                normalized = normalize_username(parts[0])
+                args.sheet_name = f"Jira Report - {normalized}"
 
     print("\n📊 Uploading report to Google Sheets...")
     print(f"Report: {args.report}")

@@ -1,52 +1,135 @@
 #!/bin/bash
 #
 # Generate Jira AI Impact Analysis Report
-# Usage: ./generate_jira_report.sh [assignee]
-#   e.g., ./generate_jira_report.sh sbudhwar@redhat.com
-#   or:   ./generate_jira_report.sh  (for team overall report)
+# Usage: ./generate_jira_report.sh [assignee] [options]
+#
+# Arguments:
+#   assignee      Optional assignee email to filter issues
+#
+# Options:
+#   --all-members     Generate reports for all team members from config
+#   --combine-only    Combine existing TSV reports without regenerating
+#
+# Examples:
+#   ./generate_jira_report.sh                       # Team overall report
+#   ./generate_jira_report.sh wlin@redhat.com       # Specific assignee
+#   ./generate_jira_report.sh --all-members         # Team + all individual members
 #
 
 set -e  # Exit on error
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# Load shared report utilities
+source "${SCRIPT_DIR}/lib/report_utils.sh"
+
+# Setup colors and paths
+setup_colors
+setup_script_paths
+
 # Load phase configuration
 CONFIG_FILE="${PROJECT_ROOT}/config/jira_phases.conf"
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo -e "${RED}Error: Configuration file not found: $CONFIG_FILE${NC}"
-    echo "Please create config/jira_phases.conf with phase definitions."
-    exit 1
-fi
-
-source "$CONFIG_FILE"
-
-# Validate configuration
-if [ ${#PHASES[@]} -eq 0 ]; then
-    echo -e "${RED}Error: No phases defined in $CONFIG_FILE${NC}"
-    echo "Please add at least one phase to the PHASES array."
-    exit 1
-fi
-
-echo -e "${GREEN}Loaded ${#PHASES[@]} phase(s) from configuration${NC}"
+load_and_validate_config "$CONFIG_FILE" "PHASES" || exit 1
 
 # Parse arguments - command line overrides config file
-if [ -n "$1" ]; then
-    ASSIGNEE="$1"
-    echo -e "${GREEN}Using assignee from command line: $ASSIGNEE${NC}"
-else
+ASSIGNEE=""
+ALL_MEMBERS=false
+COMBINE_ONLY=false
+
+for arg in "$@"; do
+    case $arg in
+        --all-members)
+            ALL_MEMBERS=true
+            ;;
+        --combine-only)
+            COMBINE_ONLY=true
+            ;;
+        --*)
+            echo -e "${RED}Error: Unknown option: $arg${NC}"
+            echo "Valid options: --all-members, --combine-only"
+            exit 1
+            ;;
+        *)
+            # First non-flag argument is the assignee
+            if [ -z "$ASSIGNEE" ]; then
+                ASSIGNEE="$arg"
+            fi
+            ;;
+    esac
+done
+
+# Handle --combine-only flag
+if [ "$COMBINE_ONLY" = true ]; then
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}Combining Existing Jira Reports${NC}"
+    echo -e "${BLUE}========================================${NC}"
+    echo ""
+
+    REPORTS_DIR="${PROJECT_ROOT}/reports/jira"
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    COMBINED_FILE="${REPORTS_DIR}/combined_jira_report_${TIMESTAMP}.tsv"
+
+    # Call shared combine function
+    combine_reports_by_metric \
+        "$REPORTS_DIR" \
+        "jira_comparison_general_*.tsv" \
+        "jira_comparison_*.tsv" \
+        "jira_comparison_general_*" \
+        "$COMBINED_FILE" \
+        "Jira AI Impact Analysis" \
+        's/jira_comparison_\([^_]*\).*/\1/' \
+        "${PROJECT_ROOT}/config/jira_phases.conf" \
+        "jira"
+
+    # Check if combine was successful
+    if [ $? -ne 0 ]; then
+        exit 1
+    fi
+
+    # Check if Google Sheets upload is configured
+    if [ -n "$GOOGLE_CREDENTIALS_FILE" ] && [ -n "$GOOGLE_SPREADSHEET_ID" ]; then
+        echo -e "${YELLOW}Uploading to Google Sheets...${NC}"
+        cd "$PROJECT_ROOT"
+        python3 -m ai_impact_analysis.cli.upload_to_sheets --report "$COMBINED_FILE"
+        echo ""
+    else
+        echo -e "${BLUE}Google Sheets upload not configured (optional)${NC}"
+        echo "You can open this file in Google Sheets manually, or configure automatic upload:"
+        echo "  export GOOGLE_CREDENTIALS_FILE=/path/to/credentials.json"
+        echo "  export GOOGLE_SPREADSHEET_ID=your_spreadsheet_id"
+        echo ""
+        echo "Or upload manually:"
+        echo "  python3 -m ai_impact_analysis.cli.upload_to_sheets --report $COMBINED_FILE"
+        echo ""
+    fi
+
+    echo -e "${GREEN}Done!${NC}"
+
+    exit 0
+fi
+
+# Handle --all-members flag
+if [ "$ALL_MEMBERS" = true ]; then
+    TEAM_MEMBERS_FILE="${PROJECT_ROOT}/config/jira_team_members.conf"
+    handle_all_members "$TEAM_MEMBERS_FILE" "$0" "assignee email" ""
+
+    echo -e "${BLUE}To combine all reports into a single TSV, run:${NC}"
+    echo -e "${BLUE}  ./bin/generate_jira_report.sh --combine-only${NC}"
+    echo ""
+
+    exit 0
+fi
+
+# Use assignee from command line or config default
+if [ -z "$ASSIGNEE" ]; then
     ASSIGNEE="${DEFAULT_ASSIGNEE}"
     if [ -n "$ASSIGNEE" ]; then
         echo -e "${GREEN}Using default assignee from config: $ASSIGNEE${NC}"
     fi
+else
+    echo -e "${GREEN}Using assignee from command line: $ASSIGNEE${NC}"
 fi
 
 if [ -n "$ASSIGNEE" ]; then
@@ -54,15 +137,11 @@ if [ -n "$ASSIGNEE" ]; then
     echo -e "${BLUE}AI Impact Analysis Report Generator${NC}"
     echo -e "${BLUE}Assignee: $ASSIGNEE${NC}"
     echo -e "${BLUE}========================================${NC}"
-    # Extract just the username part (before @)
-    USERNAME=$(echo "$ASSIGNEE" | cut -d'@' -f1)
-    PATTERN="*${USERNAME}*"
 else
     echo -e "${BLUE}========================================${NC}"
     echo -e "${BLUE}AI Impact Analysis Report Generator${NC}"
     echo -e "${BLUE}Team Overall Report${NC}"
     echo -e "${BLUE}========================================${NC}"
-    PATTERN="jira_report_[0-9]*"
 fi
 
 echo ""
@@ -70,19 +149,18 @@ echo ""
 # Step 1: Clean up old generated files
 echo -e "${YELLOW}Step 1: Cleaning up old files...${NC}"
 
-# Create reports directory if it doesn't exist
-mkdir -p reports
-
-# Remove old Jira reports
+# Determine identifier (username or general)
 if [ -n "$ASSIGNEE" ]; then
-    rm -f reports/jira_report_${USERNAME}_*.txt 2>/dev/null || true
-    rm -f reports/comparison_report_${USERNAME}_*.tsv 2>/dev/null || true
-    echo "  ✓ Removed old reports for $USERNAME"
+    # Extract and normalize username:
+    # 1. Remove @redhat.com suffix
+    # 2. Remove rh-ee- prefix
+    # 3. Remove -1, -2, etc. suffix
+    USERNAME=$(echo "$ASSIGNEE" | cut -d'@' -f1 | sed 's/^rh-ee-//; s/-[0-9]*$//')
+    IDENTIFIER="$USERNAME"
 else
-    rm -f reports/jira_report_general_*.txt 2>/dev/null || true
-    rm -f reports/comparison_report_general_*.tsv 2>/dev/null || true
-    echo "  ✓ Removed old general team reports"
+    IDENTIFIER="general"
 fi
+cleanup_old_reports "reports/jira" "$IDENTIFIER" "jira"
 
 echo ""
 
@@ -96,7 +174,14 @@ for phase_config in "${PHASES[@]}"; do
     if [ -n "$ASSIGNEE" ]; then
         python3 -m ai_impact_analysis.cli.get_jira_metrics --start "$PHASE_START" --end "$PHASE_END" --assignee "$ASSIGNEE"
     else
-        python3 -m ai_impact_analysis.cli.get_jira_metrics --start "$PHASE_START" --end "$PHASE_END"
+        # For team report, limit to team members from config
+        TEAM_MEMBERS_FILE="${PROJECT_ROOT}/config/jira_team_members.conf"
+        if [ -f "$TEAM_MEMBERS_FILE" ]; then
+            python3 -m ai_impact_analysis.cli.get_jira_metrics --start "$PHASE_START" --end "$PHASE_END" --limit-team-members "$TEAM_MEMBERS_FILE"
+        else
+            echo -e "${YELLOW}  Warning: Team members config not found, querying all project issues${NC}"
+            python3 -m ai_impact_analysis.cli.get_jira_metrics --start "$PHASE_START" --end "$PHASE_END"
+        fi
     fi
     echo -e "${GREEN}  ✓ '$PHASE_NAME' report generated${NC}"
     echo ""
@@ -114,56 +199,10 @@ fi
 echo ""
 
 # Show results
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}✓ All reports generated successfully!${NC}"
-echo -e "${GREEN}========================================${NC}"
-echo ""
+COMPARISON_FILE=$(display_report_results "reports/jira" "$IDENTIFIER" "jira" 20 | tail -1)
 
-echo -e "${BLUE}Generated files:${NC}"
-if [ -n "$ASSIGNEE" ]; then
-    ls -lh reports/jira_report_${USERNAME}_*.txt 2>/dev/null || echo "  (no Jira reports found)"
-    ls -lh reports/comparison_report_${USERNAME}_*.tsv 2>/dev/null || echo "  (no comparison report found)"
-else
-    ls -lh reports/jira_report_general_*.txt 2>/dev/null || echo "  (no Jira reports found)"
-    ls -lh reports/comparison_report_general_*.tsv 2>/dev/null || echo "  (no comparison report found)"
-fi
-
-echo ""
-
-# Get the comparison file
-if [ -n "$ASSIGNEE" ]; then
-    COMPARISON_FILE=$(ls -t reports/comparison_report_${USERNAME}_*.tsv 2>/dev/null | head -1)
-else
-    COMPARISON_FILE=$(ls -t reports/comparison_report_general_*.tsv 2>/dev/null | head -1)
-fi
-
-if [ -f "$COMPARISON_FILE" ]; then
-    echo -e "${BLUE}Preview of comparison report ($COMPARISON_FILE):${NC}"
-    echo "----------------------------------------"
-    head -20 "$COMPARISON_FILE"
-    echo "----------------------------------------"
-    echo "(showing first 20 lines)"
-    echo ""
-fi
-
-# Check if Google Sheets upload is configured
-if [ -n "$GOOGLE_CREDENTIALS_FILE" ] && [ -n "$GOOGLE_SPREADSHEET_ID" ]; then
-    if [ -f "$COMPARISON_FILE" ]; then
-        echo -e "${YELLOW}Uploading to Google Sheets...${NC}"
-        python3 -m ai_impact_analysis.cli.upload_to_sheets --report "$COMPARISON_FILE"
-        echo ""
-    fi
-else
-    echo -e "${BLUE}Google Sheets upload not configured (optional)${NC}"
-    if [ -f "$COMPARISON_FILE" ]; then
-        echo "To upload manually, run:"
-        echo "  python3 -m ai_impact_analysis.cli.upload_to_sheets --report $COMPARISON_FILE"
-        echo ""
-        echo "Or configure automatic upload:"
-        echo "  export GOOGLE_CREDENTIALS_FILE=/path/to/credentials.json"
-        echo "  export GOOGLE_SPREADSHEET_ID=your_spreadsheet_id"
-    fi
-    echo ""
-fi
+# Upload to Google Sheets if configured
+cd "$PROJECT_ROOT"
+upload_to_google_sheets "$COMPARISON_FILE"
 
 echo -e "${GREEN}Done!${NC}"
