@@ -6,7 +6,7 @@ import os
 import requests
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
-from ai_impact_analysis.logger import logger
+from ai_impact_analysis.utils.logger import logger
 
 
 class GitHubClient:

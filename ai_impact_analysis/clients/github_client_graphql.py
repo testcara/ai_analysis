@@ -15,7 +15,7 @@ import requests
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Set
-from ai_impact_analysis.logger import logger
+from ai_impact_analysis.utils.logger import logger
 
 
 class GitHubGraphQLClient:

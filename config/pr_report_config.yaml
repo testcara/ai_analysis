@@ -1,0 +1,25 @@
+phases:
+  - name: "No AI Period"
+    start: "2024-10-24"
+    end: "2025-05-30"
+  - name: "Cursor Period"
+    start: "2025-06-02"
+    end: "2025-07-31"
+  - name: "Full AI Period"
+    start: "2025-08-01"
+    end: "2025-11-03"
+
+default_author: "" # "" represent team
+
+team_members:
+  - name: sahil143
+  - name: testcara
+  - name: rrosatti
+  - name: marcin-michal
+  - name: StanislavJochman
+  - name: JoaoPedroPP
+  - name: janaki29
+  - name: rakshett
+  - name: milantaky
+  - name: abhinandan13jan
+  - name: Katka92

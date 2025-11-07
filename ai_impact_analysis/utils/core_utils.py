@@ -1,5 +1,7 @@
 """Utility functions for Jira data analysis."""
 
+import csv
+import re
 from datetime import datetime
 
 
@@ -179,3 +181,49 @@ def build_jql_query(project_key, start_date=None, end_date=None, status=None, as
             jql_parts.append(f'status = "{status}"')
 
     return " AND ".join(jql_parts)
+
+
+def read_tsv_report(filepath):
+    """
+    Read TSV/CSV report file and return as list of rows.
+
+    Args:
+        filepath: Path to TSV or CSV file
+
+    Returns:
+        List of lists (rows)
+    """
+    rows = []
+
+    # Detect delimiter
+    delimiter = "\t" if filepath.endswith(".tsv") else ","
+
+    with open(filepath, "r", encoding="utf-8") as f:
+        reader = csv.reader(f, delimiter=delimiter)
+        for row in reader:
+            rows.append(row)
+
+    return rows
+
+
+def normalize_username(username):
+    """
+    Normalize username by removing common prefixes/suffixes:
+    - Remove @redhat.com, @gmail.com, etc.
+    - Remove rh-ee- prefix
+    - Remove -1, -2, etc. suffix
+
+    Args:
+        username: Username string to normalize
+
+    Returns:
+        Normalized username string
+    """
+    # Remove email domain
+    username = username.split("@")[0]
+    # Remove rh-ee- prefix
+    if username.startswith("rh-ee-"):
+        username = username[6:]  # len("rh-ee-") = 6
+    # Remove -1, -2, etc. suffix
+    username = re.sub(r'-\d+$', '', username)
+    return username

@@ -1,0 +1,25 @@
+phases:
+  - name: "No AI Period"
+    start: "2024-10-24"
+    end: "2025-05-30"
+  - name: "Cursor Period"
+    start: "2025-06-02"
+    end: "2025-07-31"
+  - name: "Full AI Period"
+    start: "2025-08-01"
+    end: "2025-11-03"
+
+default_assignee: "" # "" represent team
+
+team_members:
+  - email: sbudhwar@redhat.com
+  - email: wlin@redhat.com
+  - email: kkanova@redhat.com
+  - email: djanaki@redhat.com
+  - email: rakshett@redhat.com
+  - email: abhindas@redhat.com
+  - email: rgalvao@redhat.com
+  - email: sjochman@redhat.com
+  - email: mtakac@redhat.com
+  - email: jpolonip@redhat.com
+  - email: mmarcin@redhat.com
