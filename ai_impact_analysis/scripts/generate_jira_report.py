@@ -42,7 +42,9 @@ def generate_phase_report(
     start_date: str,
     end_date: str,
     assignee: Optional[str] = None,
-    limit_team_members: Optional[Path] = None
+    config_file: Optional[Path] = None,
+    leave_days: int = 0,
+    capacity: float = 1.0
 ) -> bool:
     """Generate report for a single phase."""
     args = [
@@ -53,8 +55,14 @@ def generate_phase_report(
 
     if assignee:
         args.extend(["--assignee", assignee])
-    elif limit_team_members and limit_team_members.exists():
-        args.extend(["--limit-team-members", str(limit_team_members)])
+    elif config_file and config_file.exists():
+        args.extend(["--config", str(config_file)])
+
+    if leave_days > 0:
+        args.extend(["--leave-days", str(leave_days)])
+
+    if capacity != 1.0:
+        args.extend(["--capacity", str(capacity)])
 
     try:
         subprocess.run(args, check=True)
@@ -79,7 +87,7 @@ def generate_comparison_report(assignee: Optional[str] = None) -> bool:
         return False
 
 
-def generate_all_members_reports(team_members_file: Path, script_name: str) -> int:
+def generate_all_members_reports(team_members_file: Path, script_name: str, no_upload: bool = False) -> int:
     """Generate reports for all team members."""
     print_header("Generating reports for all team members")
 
@@ -91,7 +99,10 @@ def generate_all_members_reports(team_members_file: Path, script_name: str) -> i
     # Generate team overall report first
     print(f"{Colors.BLUE}>>> Generating Team Overall Report{Colors.NC}")
     print()
-    result = subprocess.run([sys.executable, "-m", script_name])
+    cmd = [sys.executable, "-m", script_name]
+    if no_upload:
+        cmd.append("--no-upload")
+    result = subprocess.run(cmd)
     if result.returncode != 0:
         print(f"{Colors.RED}  ✗ Failed to generate team report{Colors.NC}")
         return 1
@@ -103,7 +114,10 @@ def generate_all_members_reports(team_members_file: Path, script_name: str) -> i
     for member in members:
         print(f"{Colors.BLUE}>>> Generating Report for: {member}{Colors.NC}")
         print()
-        result = subprocess.run([sys.executable, "-m", script_name, member])
+        cmd = [sys.executable, "-m", script_name, member]
+        if no_upload:
+            cmd.append("--no-upload")
+        result = subprocess.run(cmd)
         if result.returncode != 0:
             failed_members.append(member)
         print()
@@ -160,11 +174,21 @@ Examples:
         action="store_true",
         help="Skip uploading report to Google Sheets",
     )
+    parser.add_argument(
+        "--config",
+        type=str,
+        help="Path to custom config YAML file. Settings override defaults from config/jira_report_config.yaml",
+        default=None,
+    )
 
     args = parser.parse_args()
 
     project_root = get_project_root()
-    config_file = project_root / "config" / "jira_report_config.yaml"
+    default_config_file = project_root / "config" / "jira_report_config.yaml"
+    custom_config_file = Path(args.config) if args.config else None
+
+    # Use custom config if provided, otherwise use default
+    config_file = custom_config_file if custom_config_file and custom_config_file.exists() else default_config_file
     reports_dir = project_root / "reports" / "jira"
 
     # Handle --combine-only flag
@@ -195,12 +219,18 @@ Examples:
     if args.all_members:
         return generate_all_members_reports(
             config_file,  # Use same config file for team members
-            "ai_impact_analysis.scripts.generate_jira_report"
+            "ai_impact_analysis.scripts.generate_jira_report",
+            no_upload=args.no_upload
         )
 
-    # Load configuration
+    # Load configuration (with custom config merge if provided)
     try:
-        phases, default_assignee = load_config_file(config_file)
+        if custom_config_file and custom_config_file.exists():
+            # Merge custom config with default
+            phases, default_assignee = load_config_file(default_config_file, custom_config_file)
+        else:
+            # Use default config only
+            phases, default_assignee = load_config_file(config_file)
     except (FileNotFoundError, ValueError) as e:
         print(f"{Colors.RED}Error loading config: {e}{Colors.NC}")
         return 1
@@ -223,17 +253,85 @@ Examples:
 
     # Step 2-N: Generate reports for each phase
     step_num = 2
-    limit_team_file = config_file if not assignee else None
+    # Use config file for team members filtering (only when not filtering by assignee)
+    team_config_file = config_file if not assignee else None
 
-    for phase_name, start_date, end_date in phases:
+    # Load leave_days and capacity
+    leave_days_list = None
+    capacity_list = None
+    from ai_impact_analysis.utils.workflow_utils import load_team_members_from_yaml
+    team_members_details = load_team_members_from_yaml(config_file, detailed=True)
+
+    if assignee:
+        # Individual report: get specific member's values
+        for identifier, details in team_members_details.items():
+            if identifier == assignee or details.get('member') == assignee:
+                # Process leave_days
+                leave_days_config = details.get('leave_days', 0)
+                if isinstance(leave_days_config, list):
+                    leave_days_list = leave_days_config
+                else:
+                    # Single value, use for all phases
+                    leave_days_list = [leave_days_config] * len(phases)
+
+                # Process capacity
+                capacity_config = details.get('capacity', 1.0)
+                if isinstance(capacity_config, list):
+                    capacity_list = capacity_config
+                else:
+                    # Single value, use for all phases
+                    capacity_list = [capacity_config] * len(phases)
+                break
+    else:
+        # Team report: aggregate all members' values
+        # Initialize lists for each phase
+        leave_days_list = [0.0] * len(phases)
+        capacity_list = [0.0] * len(phases)
+
+        for identifier, details in team_members_details.items():
+            # Process leave_days
+            leave_days_config = details.get('leave_days', 0)
+            if isinstance(leave_days_config, list):
+                for i, ld in enumerate(leave_days_config):
+                    if i < len(leave_days_list):
+                        leave_days_list[i] += ld
+            else:
+                # Single value, add to all phases
+                for i in range(len(phases)):
+                    leave_days_list[i] += leave_days_config
+
+            # Process capacity
+            capacity_config = details.get('capacity', 1.0)
+            if isinstance(capacity_config, list):
+                for i, cap in enumerate(capacity_config):
+                    if i < len(capacity_list):
+                        capacity_list[i] += cap
+            else:
+                # Single value, add to all phases
+                for i in range(len(phases)):
+                    capacity_list[i] += capacity_config
+
+    for phase_index, (phase_name, start_date, end_date) in enumerate(phases):
         print(f"{Colors.YELLOW}Step {step_num}: Generating report for '{phase_name}' ({start_date} to {end_date})...{Colors.NC}")
+
+        # Get leave_days for this phase
+        phase_leave_days = 0
+        if leave_days_list and phase_index < len(leave_days_list):
+            phase_leave_days = leave_days_list[phase_index]
+
+        # Get capacity for this phase
+        phase_capacity = 1.0
+        if capacity_list and phase_index < len(capacity_list):
+            phase_capacity = capacity_list[phase_index]
 
         success = generate_phase_report(
             phase_name,
             start_date,
             end_date,
             assignee=assignee,
-            limit_team_members=limit_team_file
+            config_file=team_config_file,
+            leave_days=phase_leave_days,
+            capacity=phase_capacity
         )
 
         if success:

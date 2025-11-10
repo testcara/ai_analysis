@@ -21,7 +21,9 @@ from ai_impact_analysis.utils.report_utils import (
 class JiraReportGenerator:
     """Generates reports from Jira metrics data."""
 
-    def generate_text_report(self, metrics, jql_query, project_key, assignee=None):
+
+    def generate_text_report(self, metrics, jql_query, project_key, assignee=None,
+                            start_date=None, end_date=None, leave_days=0, capacity=1.0):
         """
         Generate human-readable text report from metrics.
 
@@ -30,6 +32,10 @@ class JiraReportGenerator:
             jql_query: JQL query used
             project_key: Project key
             assignee: Optional assignee filter
+            start_date: Phase start date (YYYY-MM-DD) for Data Span calculation
+            end_date: Phase end date (YYYY-MM-DD) for Data Span calculation
+            leave_days: Number of leave days
+            capacity: Work capacity (0.0 to 1.0, default 1.0 = full time)
 
         Returns:
             String report
@@ -49,26 +55,35 @@ class JiraReportGenerator:
 
         # Data Time Range
         report_lines.append("\n--- Data Time Range ---")
-        created_dates = metrics.get("created_dates", [])
-        resolution_dates = metrics.get("resolution_dates", [])
 
-        if created_dates and resolution_dates:
-            earliest_created = min(created_dates)
-            latest_created = max(created_dates)
-            earliest_resolved = min(resolution_dates)
-            latest_resolved = max(resolution_dates)
+        if start_date and end_date:
+            # Show phase configuration dates
+            report_lines.append(f"Start: {start_date}")
+            report_lines.append(f"End: {end_date}")
 
-            report_lines.append(f"Earliest Created: {earliest_created.strftime('%Y-%m-%d %H:%M:%S')}")
-            report_lines.append(f"Latest Created: {latest_created.strftime('%Y-%m-%d %H:%M:%S')}")
-            report_lines.append(f"Earliest Resolved: {earliest_resolved.strftime('%Y-%m-%d %H:%M:%S')}")
-            report_lines.append(f"Latest Resolved: {latest_resolved.strftime('%Y-%m-%d %H:%M:%S')}")
-            report_lines.append(f"Data Span: {(latest_resolved - earliest_created).days} days")
+            # Calculate phase days
+            phase_start = datetime.strptime(start_date, '%Y-%m-%d')
+            phase_end = datetime.strptime(end_date, '%Y-%m-%d')
+            phase_days = (phase_end - phase_start).days + 1  # Inclusive
+
+            # Show leave days info
+            if leave_days > 0:
+                report_lines.append(f"Leave Days: {leave_days} days")
+            else:
+                report_lines.append(f"Leave Days: 0 days")
+
+            # Show capacity
+            report_lines.append(f"Capacity: {capacity}")
+
+            # Data Span is always END - START (inclusive)
+            report_lines.append(f"Data Span: {phase_days} days")
         else:
-            report_lines.append("Earliest Created: N/A")
-            report_lines.append("Latest Created: N/A")
-            report_lines.append("Earliest Resolved: N/A")
-            report_lines.append("Latest Resolved: N/A")
-            report_lines.append("Data Span: 0 days")
+            # Fallback when no phase dates provided
+            report_lines.append("Start: N/A")
+            report_lines.append("End: N/A")
+            report_lines.append("Leave Days: 0 days")
+            report_lines.append("Capacity: 1.0")
+            report_lines.append("Data Span: N/A")
 
         # Issue type statistics
         report_lines.append("\n--- Issue Type Statistics ---")
@@ -334,6 +349,18 @@ class JiraReportGenerator:
                 match = re.search(r"Longest Closure Time:\s*([\d.]+)\s*days", line)
                 if match:
                     data["closure_stats"]["max_days"] = float(match.group(1))
+            elif line.startswith("Start:"):
+                data["time_range"]["start_date"] = line.split(":", 1)[1].strip()
+            elif line.startswith("End:"):
+                data["time_range"]["end_date"] = line.split(":", 1)[1].strip()
+            elif line.startswith("Leave Days:"):
+                match = re.search(r"Leave Days:\s*([\d.]+)\s*days?", line)
+                if match:
+                    data["time_range"]["leave_days"] = float(match.group(1))
+            elif line.startswith("Capacity:"):
+                match = re.search(r"Capacity:\s*([\d.]+)", line)
+                if match:
+                    data["time_range"]["capacity"] = float(match.group(1))
             elif line.startswith("Earliest Resolved:"):
                 data["time_range"]["earliest_resolved"] = line.split(":", 1)[1].strip()
             elif line.startswith("Latest Resolved:"):
@@ -396,7 +423,8 @@ class JiraReportGenerator:
 
         return data
 
-    def generate_comparison_tsv(self, reports, phase_names, assignee=None):
+    def generate_comparison_tsv(self, reports, phase_names, assignee=None,
+                                phase_configs=None):
         """
         Generate TSV comparison report from multiple phase reports.
 
@@ -404,6 +432,7 @@ class JiraReportGenerator:
             reports: List of parsed report dictionaries
             phase_names: List of phase names
             assignee: Optional assignee
+            phase_configs: Optional list of (name, start_date, end_date) tuples from config (for displaying phase dates)
 
         Returns:
             TSV format string
@@ -427,43 +456,42 @@ class JiraReportGenerator:
 
         # Phase info with date ranges
         for i, (name, report) in enumerate(zip(phase_names, reports), 1):
-            earliest = report["time_range"].get("earliest_resolved", "N/A")
-            latest = report["time_range"].get("latest_resolved", "N/A")
-
-            # Extract just the date part
-            if earliest != "N/A":
-                earliest_date = earliest.split()[0]
-            else:
-                earliest_date = "N/A"
-
-            if latest != "N/A":
-                latest_date = latest.split()[0]
-            else:
-                latest_date = "N/A"
-
-            lines.append(f"Phase {i}: {name} ({earliest_date} to {latest_date})")
+            start_date = report["time_range"].get("start_date", "N/A")
+            end_date = report["time_range"].get("end_date", "N/A")
+            lines.append(f"Phase {i}: {name} ({start_date} to {end_date})")
         lines.append("")
 
         # Metrics table header
         header = "Metric\t" + "\t".join(phase_names)
         lines.append(header)
 
-        # Period duration
+        # Period duration (always use Data Span from individual reports)
         periods = []
         for r in reports:
-            earliest = r["time_range"].get("earliest_resolved", "N/A")
-            latest = r["time_range"].get("latest_resolved", "N/A")
-            if earliest != "N/A" and latest != "N/A":
-                try:
-                    start = datetime.strptime(earliest.split()[0], "%Y-%m-%d")
-                    end = datetime.strptime(latest.split()[0], "%Y-%m-%d")
-                    period_days = (end - start).days
-                    periods.append(f"{period_days}d")
-                except Exception:
-                    periods.append("N/A")
+            span_days = r["time_range"].get("span_days")
+            if span_days is not None:
+                periods.append(f"{span_days}d")
             else:
                 periods.append("N/A")
         lines.append("Analysis Period\t" + "\t".join(periods))
+
+        # Leave days
+        leave_days_list = []
+        for r in reports:
+            leave_days = r["time_range"].get("leave_days", 0)
+            # Format as int if it's a whole number, otherwise as float
+            if isinstance(leave_days, float) and leave_days == int(leave_days):
+                leave_days_list.append(str(int(leave_days)))
+            else:
+                leave_days_list.append(str(leave_days))
+        lines.append("Leave Days\t" + "\t".join(leave_days_list))
+
+        # Capacity
+        capacity_list = []
+        for r in reports:
+            capacity = r["time_range"].get("capacity", 1.0)
+            capacity_list.append(str(capacity))
+        lines.append("Capacity\t" + "\t".join(capacity_list))
 
         # Total issues
         issues = [str(r["total_issues"]) for r in reports]
@@ -477,13 +505,56 @@ class JiraReportGenerator:
         max_times = [r["closure_stats"].get("max_days", 0) for r in reports]
         lines.append("Longest Closure Time\t" + "\t".join(f"{t:.2f}d" for t in max_times))
 
-        # Daily throughput
+        # Daily throughput (skip leave days) = Total Issues / (Analysis Period - Leave Days)
+        throughputs_skip_leave = []
+        for i, report in enumerate(reports):
+            period = periods[i]
+            if period != "N/A" and period.endswith("d"):
+                analysis_days = int(period.replace("d", ""))
+                leave_days = report["time_range"].get("leave_days", 0)
+                effective_days = analysis_days - leave_days
+                throughput = report["total_issues"] / effective_days if effective_days > 0 else 0
+                throughputs_skip_leave.append(f"{throughput:.2f}/d")
+            else:
+                throughputs_skip_leave.append("N/A")
+        lines.append("Daily Throughput (skip leave days)\t" + "\t".join(throughputs_skip_leave))
+
+        # Daily throughput (based on capacity) = Total Issues / (Analysis Period × Capacity)
+        throughputs_capacity = []
+        for i, report in enumerate(reports):
+            period = periods[i]
+            if period != "N/A" and period.endswith("d"):
+                analysis_days = int(period.replace("d", ""))
+                capacity = report["time_range"].get("capacity", 1.0)
+                effective_days = analysis_days * capacity
+                throughput = report["total_issues"] / effective_days if effective_days > 0 else 0
+                throughputs_capacity.append(f"{throughput:.2f}/d")
+            else:
+                throughputs_capacity.append("N/A")
+        lines.append("Daily Throughput (based on capacity)\t" + "\t".join(throughputs_capacity))
+
+        # Daily throughput (considering leave days + capacity) = Total Issues / ((Analysis Period - Leave Days) × Capacity)
+        throughputs_both = []
+        for i, report in enumerate(reports):
+            period = periods[i]
+            if period != "N/A" and period.endswith("d"):
+                analysis_days = int(period.replace("d", ""))
+                leave_days = report["time_range"].get("leave_days", 0)
+                capacity = report["time_range"].get("capacity", 1.0)
+                effective_days = (analysis_days - leave_days) * capacity
+                throughput = report["total_issues"] / effective_days if effective_days > 0 else 0
+                throughputs_both.append(f"{throughput:.2f}/d")
+            else:
+                throughputs_both.append("N/A")
+        lines.append("Daily Throughput (considering leave days + capacity)\t" + "\t".join(throughputs_both))
+
+        # Daily throughput = Total Issues / Analysis Period
         throughputs = []
         for i, report in enumerate(reports):
             period = periods[i]
             if period != "N/A" and period.endswith("d"):
-                days = int(period.replace("d", ""))
-                throughput = report["total_issues"] / days if days > 0 else 0
+                analysis_days = int(period.replace("d", ""))
+                throughput = report["total_issues"] / analysis_days if analysis_days > 0 else 0
                 throughputs.append(f"{throughput:.2f}/d")
             else:
                 throughputs.append("N/A")

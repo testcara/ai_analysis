@@ -28,13 +28,60 @@ def main():
         "--assignee", type=str, help="Specify assignee (username or email)", default=None
     )
     parser.add_argument(
-        "--limit-team-members",
+        "--config",
         type=str,
-        help="Path to team members config file. When set without --assignee, limits team report to only these members",
+        help="Path to custom config YAML file. Settings from this file override defaults from config/jira_report_config.yaml",
+        default=None,
+    )
+    parser.add_argument(
+        "--leave-days",
+        type=str,
+        help="Number of leave days for this phase (e.g., '26' or '11.5')",
+        default=None,
+    )
+    parser.add_argument(
+        "--capacity",
+        type=str,
+        help="Work capacity for this member (0.0 to 1.0, e.g., '0.8' for 80%% time)",
         default=None,
     )
 
     args = parser.parse_args()
+
+    # Load config if specified (will be merged with defaults)
+    team_members_file = None
+    if args.config:
+        from pathlib import Path
+        team_members_file = Path(args.config)
+        if not team_members_file.exists():
+            print(f"Error: Config file not found: {args.config}")
+            return 1
+
+    # Determine which config file to use for leave_days lookup
+    from pathlib import Path
+    from ai_impact_analysis.utils.workflow_utils import get_project_root, load_team_members_from_yaml
+
+    project_root = get_project_root()
+    default_config_path = project_root / "config" / "jira_report_config.yaml"
+    config_path = team_members_file if team_members_file else default_config_path
+
+    # Get leave_days from command line argument
+    leave_days = 0
+    if args.leave_days is not None:
+        try:
+            leave_days = float(args.leave_days)
+        except ValueError:
+            print(f"Error: --leave-days must be a number, got '{args.leave_days}'")
+            return 1
+
+    # Get capacity from command line argument
+    capacity = 1.0
+    if args.capacity is not None:
+        try:
+            capacity = float(args.capacity)
+        except ValueError:
+            print(f"Error: --capacity must be a number, got '{args.capacity}'")
+            return 1
 
     # Initialize calculator and report generator
     calculator = JiraMetricsCalculator(project_key=args.project)
@@ -44,7 +91,7 @@ def main():
     jql_query, team_members = calculator.build_jql_query(
         project_key=args.project,
         assignee=args.assignee,
-        team_members_file=args.limit_team_members,
+        team_members_file=team_members_file,
         start_date=args.start,
         end_date=args.end,
         status=args.status,
@@ -68,7 +115,11 @@ def main():
         metrics,
         jql_query,
         args.project or calculator.project_key,
-        assignee=args.assignee
+        assignee=args.assignee,
+        start_date=args.start,
+        end_date=args.end,
+        leave_days=leave_days,
+        capacity=capacity
     )
 
     # Print report to console

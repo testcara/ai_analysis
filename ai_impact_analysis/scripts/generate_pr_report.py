@@ -80,7 +80,7 @@ def generate_comparison_report(author: Optional[str] = None) -> bool:
         return False
 
 
-def generate_all_members_reports(team_members_file: Path, script_name: str) -> int:
+def generate_all_members_reports(team_members_file: Path, script_name: str, no_upload: bool = False) -> int:
     """Generate reports for all team members."""
     print_header("Generating reports for all team members")
 
@@ -92,7 +92,10 @@ def generate_all_members_reports(team_members_file: Path, script_name: str) -> i
     # Generate team overall report first
     print(f"{Colors.BLUE}>>> Generating Team Overall Report{Colors.NC}")
     print()
-    result = subprocess.run([sys.executable, "-m", script_name])
+    cmd = [sys.executable, "-m", script_name]
+    if no_upload:
+        cmd.append("--no-upload")
+    result = subprocess.run(cmd)
     if result.returncode != 0:
         print(f"{Colors.RED}  ✗ Failed to generate team report{Colors.NC}")
         return 1
@@ -104,7 +107,10 @@ def generate_all_members_reports(team_members_file: Path, script_name: str) -> i
     for member in members:
         print(f"{Colors.BLUE}>>> Generating Report for: {member}{Colors.NC}")
         print()
-        result = subprocess.run([sys.executable, "-m", script_name, member])
+        cmd = [sys.executable, "-m", script_name, member]
+        if no_upload:
+            cmd.append("--no-upload")
+        result = subprocess.run(cmd)
         if result.returncode != 0:
             failed_members.append(member)
         print()
@@ -176,17 +182,42 @@ Examples:
 
     # Handle --combine-only flag
     if args.combine_only:
+        from ai_impact_analysis.utils.report_utils import combine_comparison_reports
+
         print_header("Combining Existing GitHub PR Reports")
-        print(f"{Colors.YELLOW}Note: The combine feature requires the bash implementation.{Colors.NC}")
-        print(f"{Colors.YELLOW}For now, please use: bash bin/generate_pr_report.sh --combine-only{Colors.NC}")
-        print()
-        return 0
+
+        try:
+            output_file = combine_comparison_reports(
+                reports_dir=str(reports_dir),
+                report_type="pr",
+                title="GitHub PR AI Impact Analysis - Combined Report (Grouped by Metric)"
+            )
+            print(f"{Colors.GREEN}✓ Combined report generated: {output_file.name}{Colors.NC}")
+            print()
+
+            # Upload to Google Sheets if not disabled
+            if not args.no_upload:
+                print(f"{Colors.YELLOW}Uploading to Google Sheets...{Colors.NC}")
+                upload_to_google_sheets(output_file)
+            else:
+                print(f"{Colors.YELLOW}Skipping upload to Google Sheets (--no-upload specified){Colors.NC}")
+
+            print()
+            print(f"{Colors.GREEN}{'=' * 40}{Colors.NC}")
+            print(f"{Colors.GREEN}✓ Combined report completed successfully!{Colors.NC}")
+            print(f"{Colors.GREEN}{'=' * 40}{Colors.NC}")
+            return 0
+
+        except Exception as e:
+            print(f"{Colors.RED}Error combining reports: {e}{Colors.NC}")
+            return 1
 
     # Handle --all-members flag
     if args.all_members:
         return generate_all_members_reports(
             config_file,  # Use same config file for team members
-            "ai_impact_analysis.scripts.generate_pr_report"
+            "ai_impact_analysis.scripts.generate_pr_report",
+            no_upload=args.no_upload
         )
 
     # Load configuration

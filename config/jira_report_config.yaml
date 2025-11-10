@@ -1,25 +1,64 @@
 phases:
   - name: "No AI Period"
     start: "2024-10-24"
-    end: "2025-05-30"
+    end: "2025-05-31"
   - name: "Cursor Period"
-    start: "2025-06-02"
+    start: "2025-06-01"
     end: "2025-07-31"
   - name: "Full AI Period"
     start: "2025-08-01"
-    end: "2025-11-03"
+    end: "2025-11-08"
 
 default_assignee: "" # "" represent team
 
 team_members:
-  - email: sbudhwar@redhat.com
-  - email: wlin@redhat.com
-  - email: kkanova@redhat.com
-  - email: djanaki@redhat.com
-  - email: rakshett@redhat.com
-  - email: abhindas@redhat.com
-  - email: rgalvao@redhat.com
-  - email: sjochman@redhat.com
-  - email: mtakac@redhat.com
-  - email: jpolonip@redhat.com
-  - email: mmarcin@redhat.com
+  - member: sbudhwar
+    leave_days:
+    email: sbudhwar@redhat.com
+    capacity: 1
+  - member: wlin
+    email: wlin@redhat.com
+    leave_days:
+      - 26
+      - 20
+      - 11.5
+    capacity: 0.8
+  - member: kkanova
+    email: kkanova@redhat.com
+    leave_days: 0
+    capacity: 0.5
+  - member: djanaki
+    email: djanaki@redhat.com
+    leave_days: 0
+    capacity: 1
+  - member: rakshett
+    email: rakshett@redhat.com
+    leave_days: 0
+    capacity: 1
+  - member: abhindas
+    email: abhindas@redhat.com
+    leave_days: 0
+    capacity:
+      - 1.0
+      - 0.5
+      - 0.0
+  - member: rgalvao
+    email: rgalvao@redhat.com
+    leave_days: 0
+    capacity: 1
+  - member: sjochman
+    email: sjochman@redhat.com
+    leave_days: 0
+    capacity: 1
+  - member: mtakac
+    email: mtakac@redhat.com
+    capacity: 1
+    leave_days: 0
+  - member: jpolonip
+    email: jpolonip@redhat.com
+    leave_days: 0
+    capacity: 1
+  - member: mmarcin
+    email: mmarcin@redhat.com
+    leave_days: 0
+    capacity: 1

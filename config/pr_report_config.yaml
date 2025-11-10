@@ -1,13 +1,13 @@
 phases:
   - name: "No AI Period"
     start: "2024-10-24"
-    end: "2025-05-30"
+    end: "2025-05-31"
   - name: "Cursor Period"
-    start: "2025-06-02"
+    start: "2025-06-01"
     end: "2025-07-31"
   - name: "Full AI Period"
     start: "2025-08-01"
-    end: "2025-11-03"
+    end: "2025-11-08"
 
 default_author: "" # "" represent team
 

@@ -8,7 +8,7 @@ to avoid code duplication.
 import os
 import re
 from datetime import datetime
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Tuple, Dict
 
 
 def normalize_username(username):
@@ -178,7 +178,8 @@ def generate_comparison_report(
     identifier: Optional[str] = None,
     output_dir: str = "reports",
     output_file: Optional[str] = None,
-    report_type: str = "jira"
+    report_type: str = "jira",
+    phase_configs: Optional[List[Tuple[str, str, str]]] = None
 ) -> str:
     """
     Generate comparison report from multiple phase reports.
@@ -193,6 +194,7 @@ def generate_comparison_report(
         output_dir: Output directory for the comparison report
         output_file: Optional custom output filename
         report_type: "jira" or "pr" for file naming
+        phase_configs: Optional list of (name, start_date, end_date) tuples from config (for displaying phase dates)
 
     Returns:
         Path to generated comparison report file
@@ -211,9 +213,24 @@ def generate_comparison_report(
 
     # Generate comparison TSV
     print("\nGenerating comparison report...")
-    comparison_tsv = report_generator.generate_comparison_tsv(
-        parsed_reports, phase_names, identifier
-    )
+
+    # Build kwargs for generate_comparison_tsv
+    tsv_kwargs = {
+        'reports': parsed_reports,
+        'phase_names': phase_names,
+    }
+
+    # Add identifier (different parameter names for different report types)
+    if report_type == "jira":
+        tsv_kwargs['assignee'] = identifier
+    else:  # pr
+        tsv_kwargs['author'] = identifier
+
+    # Add phase_configs if available (for displaying phase dates)
+    if phase_configs:
+        tsv_kwargs['phase_configs'] = phase_configs
+
+    comparison_tsv = report_generator.generate_comparison_tsv(**tsv_kwargs)
 
     # Determine output filename
     os.makedirs(output_dir, exist_ok=True)
@@ -291,13 +308,13 @@ def combine_comparison_reports(
 
     all_files = glob.glob(pattern)
 
-    # Filter out general reports
-    report_files = [f for f in all_files if "_general_" not in f]
+    # Include all reports (both general and individual members)
+    report_files = all_files
 
     if not report_files:
-        raise ValueError(f"No individual {report_type} comparison reports found in {reports_dir}")
+        raise ValueError(f"No {report_type} comparison reports found in {reports_dir}")
 
-    print(f"Found {len(report_files)} individual reports to combine")
+    print(f"Found {len(report_files)} reports to combine")
 
     # Parse all reports and extract member names and metrics
     members_data = {}  # {member_name: {metric_name: [phase1_val, phase2_val, ...]}}
@@ -309,7 +326,7 @@ def combine_comparison_reports(
         basename = os.path.basename(report_file)
         parts = basename.split("_")
         if len(parts) >= 3:
-            member_name = parts[2]  # e.g., "wlin", "sbudhwar"
+            member_name = parts[2]  # e.g., "wlin", "sbudhwar", "general"
         else:
             continue
 
@@ -382,17 +399,18 @@ def combine_comparison_reports(
     # Sort members for consistent output
     sorted_members = sorted(members_data.keys())
 
-    # Add "team" at the beginning if it exists
+    # Put "general" at the beginning and rename to "team"
     if "general" in sorted_members:
         sorted_members.remove("general")
-        sorted_members.insert(0, "team")
+        sorted_members.insert(0, "general")
 
     # For each metric, create a section
     for metric in all_metrics:
         lines.append(f"=== {metric} ===")
 
-        # Header: Phase + all members
-        header = "Phase\t" + "\t".join(sorted_members)
+        # Header: Phase + all members (display "team" instead of "general")
+        display_members = ["team" if m == "general" else m for m in sorted_members]
+        header = "Phase\t" + "\t".join(display_members)
         lines.append(header)
 
         # For each phase, gather all members' values
@@ -400,8 +418,7 @@ def combine_comparison_reports(
             row_values = [phase_name]
 
             for member in sorted_members:
-                member_key = "general" if member == "team" else member
-                member_data = members_data.get(member_key, {})
+                member_data = members_data.get(member, {})
                 metric_values = member_data.get(metric, [])
 
                 # Get value for this phase

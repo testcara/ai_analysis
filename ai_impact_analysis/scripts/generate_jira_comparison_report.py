@@ -14,7 +14,12 @@ from pathlib import Path
 
 from ai_impact_analysis.core.jira_report_generator import JiraReportGenerator
 from ai_impact_analysis.utils.report_utils import normalize_username, generate_comparison_report
-from ai_impact_analysis.utils.workflow_utils import load_config_file, get_project_root
+from ai_impact_analysis.utils.workflow_utils import (
+    load_config_file,
+    get_project_root,
+    load_team_members_from_yaml,
+    resolve_member_identifier
+)
 
 
 def find_reports(assignee=None, reports_dir="reports/jira"):
@@ -57,7 +62,6 @@ def main():
         help="Output filename (default: auto-generated)",
         default=None,
     )
-
     args = parser.parse_args()
 
     # Load phase configuration to get phase names
@@ -71,8 +75,17 @@ def main():
         print(f"Warning: Could not load phase names from config: {e}")
         phase_names = []
 
-    # Find matching reports
-    report_files = find_reports(args.assignee)
+    # Resolve member identifier (supports both "wlin" and "wlin@redhat.com")
+    resolved_assignee = args.assignee
+    if args.assignee:
+        email, _ = resolve_member_identifier(args.assignee, config_file)
+        if email:
+            resolved_assignee = email
+            if email != args.assignee:
+                print(f"Resolved '{args.assignee}' to '{email}'")
+
+    # Find matching reports using resolved assignee
+    report_files = find_reports(resolved_assignee)
 
     if len(report_files) == 0:
         if args.assignee:
@@ -110,7 +123,7 @@ def main():
 
     # Generate comparison report using shared utility
     report_gen = JiraReportGenerator()
-    identifier = normalize_username(args.assignee) if args.assignee else None
+    identifier = normalize_username(resolved_assignee) if resolved_assignee else None
 
     generate_comparison_report(
         report_files=report_files,
@@ -119,7 +132,8 @@ def main():
         identifier=identifier,
         output_dir="reports/jira",
         output_file=args.output,
-        report_type="jira"
+        report_type="jira",
+        phase_configs=phases
     )
 
     return 0

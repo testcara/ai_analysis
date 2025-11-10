@@ -40,12 +40,37 @@ def get_project_root() -> Path:
 
 
 
-def load_config_file(config_path: Path) -> Tuple[List[Tuple[str, str, str]], str]:
+def merge_configs(default_config: Dict[str, Any], custom_config: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Load phase configuration from a YAML config file.
+    Merge custom configuration with default configuration.
+
+    Custom config values override defaults. Missing values in custom config
+    are taken from default config.
 
     Args:
-        config_path: Path to YAML configuration file
+        default_config: Default configuration dict
+        custom_config: Custom configuration dict (overrides defaults)
+
+    Returns:
+        Merged configuration dict
+    """
+    merged = default_config.copy()
+
+    # Override with custom values
+    for key, value in custom_config.items():
+        if value is not None:  # Only override if value is provided
+            merged[key] = value
+
+    return merged
+
+
+def load_config_file(config_path: Path, custom_config_path: Optional[Path] = None) -> Tuple[List[Tuple[str, str, str]], str]:
+    """
+    Load phase configuration from a YAML config file with optional custom config override.
+
+    Args:
+        config_path: Path to default YAML configuration file
+        custom_config_path: Optional path to custom YAML config that overrides defaults
 
     Returns:
         Tuple of (phases list, default assignee/author)
@@ -67,6 +92,17 @@ def load_config_file(config_path: Path) -> Tuple[List[Tuple[str, str, str]], str
     if not config:
         raise ValueError(f"Empty config file: {config_path}")
 
+    # Merge with custom config if provided
+    if custom_config_path and custom_config_path.exists():
+        try:
+            with open(custom_config_path, 'r') as f:
+                custom_config = yaml.safe_load(f)
+            if custom_config:
+                config = merge_configs(config, custom_config)
+                print(f"[INFO] Merged custom config from: {custom_config_path}")
+        except yaml.YAMLError as e:
+            print(f"[WARNING] Invalid YAML format in custom config {custom_config_path}: {e}")
+
     # Extract phases
     phases = []
     if 'phases' in config and config['phases']:
@@ -86,7 +122,7 @@ def load_config_file(config_path: Path) -> Tuple[List[Tuple[str, str, str]], str
     return phases, default_assignee
 
 
-def load_team_members_from_yaml(config_path: Path) -> List[str]:
+def load_team_members_from_yaml(config_path: Path, detailed: bool = False):
     """
     Load team members from YAML config file.
 
@@ -96,37 +132,65 @@ def load_team_members_from_yaml(config_path: Path) -> List[str]:
 
     Args:
         config_path: Path to YAML configuration file
+        detailed: If True, return dict with full details (leave_days, capacity)
+                  If False, return list of identifiers only
 
     Returns:
-        List of team member identifiers (emails or usernames)
+        If detailed=False: List of team member identifiers (emails or usernames)
+        If detailed=True: Dict mapping identifier to member details:
+            {
+                'wlin@redhat.com': {
+                    'member': 'wlin',
+                    'email': 'wlin@redhat.com',
+                    'leave_days': [...],
+                    'capacity': 0.8
+                },
+                ...
+            }
 
     Raises:
         FileNotFoundError: If config file doesn't exist
     """
     if not config_path.exists():
-        return []
+        return {} if detailed else []
 
     try:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
     except yaml.YAMLError:
-        return []
+        return {} if detailed else []
 
     if not config or 'team_members' not in config:
-        return []
+        return {} if detailed else []
 
-    members = []
-    for member in config['team_members']:
-        if isinstance(member, dict):
-            # Support both 'email' (Jira) and 'name' (GitHub)
-            if 'email' in member:
-                members.append(member['email'])
-            elif 'name' in member:
-                members.append(member['name'])
-        elif isinstance(member, str):
-            members.append(member)
-
-    return members
+    if detailed:
+        # Return detailed information
+        members_details = {}
+        for member in config['team_members']:
+            if isinstance(member, dict):
+                identifier = member.get('email') or member.get('name')
+                if identifier:
+                    members_details[identifier] = {
+                        'member': member.get('member', identifier),
+                        'email': member.get('email'),
+                        'name': member.get('name'),
+                        'leave_days': member.get('leave_days') or [],
+                        'capacity': member.get('capacity', 1.0)
+                    }
+        return members_details
+    else:
+        # Return simple list (backward compatible)
+        members = []
+        for member in config['team_members']:
+            if isinstance(member, dict):
+                # Support both 'email' (Jira) and 'name' (GitHub)
+                if 'email' in member:
+                    members.append(member['email'])
+                elif 'name' in member:
+                    members.append(member['name'])
+            elif isinstance(member, str):
+                members.append(member)
+        return members
 
 
 def cleanup_old_reports(reports_dir: Path, identifier: str, report_type: str) -> None:
@@ -240,6 +304,40 @@ def load_team_members(team_members_file: Path) -> List[str]:
         List of team member emails
     """
     return load_team_members_from_yaml(team_members_file)
+
+
+def resolve_member_identifier(identifier: str, config_path: Path) -> Tuple[Optional[str], Optional[Dict]]:
+    """
+    Resolve member identifier to email and details.
+
+    Supports both short format (e.g., "wlin") and email format (e.g., "wlin@redhat.com").
+    If short format is provided, looks up the member in team_members config.
+
+    Args:
+        identifier: Member identifier (short name or email)
+        config_path: Path to YAML configuration file
+
+    Returns:
+        Tuple of (email, member_details) or (None, None) if not found
+    """
+    if not identifier:
+        return None, None
+
+    # Load all team members with details
+    members_details = load_team_members_from_yaml(config_path, detailed=True)
+
+    # Check if identifier is already an email in our config
+    if identifier in members_details:
+        return identifier, members_details[identifier]
+
+    # Otherwise, try to find by short member name
+    for email, details in members_details.items():
+        member_name = details.get('member', '')
+        if member_name == identifier:
+            return email, details
+
+    # Not found, return identifier as-is (for backward compatibility)
+    return identifier, None
 
 
 def run_report_for_member(
