@@ -18,8 +18,9 @@ from ai_impact_analysis.utils.report_utils import (
 class PRReportGenerator:
     """Generates reports from PR metrics data."""
 
-    def generate_text_report(self, stats, prs_with_metrics, start_date, end_date,
-                            repo_owner, repo_name, author=None):
+    def generate_text_report(
+        self, stats, prs_with_metrics, start_date, end_date, repo_owner, repo_name, author=None
+    ):
         """
         Generate human-readable text report for a single period.
 
@@ -84,7 +85,9 @@ class PRReportGenerator:
             pr["total_commits"] for pr in prs_with_metrics if pr.get("total_commits") is not None
         ]
         reviewers = [
-            pr["reviewers_count"] for pr in prs_with_metrics if pr.get("reviewers_count") is not None
+            pr["reviewers_count"]
+            for pr in prs_with_metrics
+            if pr.get("reviewers_count") is not None
         ]
         comments = [
             pr["total_comments_count"]
@@ -93,7 +96,9 @@ class PRReportGenerator:
         ]
         additions = [pr["additions"] for pr in prs_with_metrics if pr.get("additions") is not None]
         deletions = [pr["deletions"] for pr in prs_with_metrics if pr.get("deletions") is not None]
-        files = [pr["changed_files"] for pr in prs_with_metrics if pr.get("changed_files") is not None]
+        files = [
+            pr["changed_files"] for pr in prs_with_metrics if pr.get("changed_files") is not None
+        ]
 
         # Human-only metrics (excluding bots like CodeRabbit)
         human_reviewers = [
@@ -115,7 +120,9 @@ class PRReportGenerator:
         lines.append(f"Avg Reviewers: {avg(reviewers):.2f}")
         lines.append(f"Avg Reviewers (excl. bots): {avg(human_reviewers):.2f}")
         lines.append(f"Avg Comments: {avg(comments):.2f}")
-        lines.append(f"Avg Comments (excl. bots & approvals): {avg(human_substantive_comments):.2f}")
+        lines.append(
+            f"Avg Comments (excl. bots & approvals): {avg(human_substantive_comments):.2f}"
+        )
         lines.append(f"Avg Lines Added: {avg(additions):.2f}")
         lines.append(f"Avg Lines Deleted: {avg(deletions):.2f}")
         lines.append(f"Avg Files Changed: {avg(files):.2f}")
@@ -124,8 +131,9 @@ class PRReportGenerator:
 
         return "\n".join(lines)
 
-    def generate_json_output(self, stats, prs_with_metrics, start_date, end_date,
-                            repo_owner, repo_name, author=None):
+    def generate_json_output(
+        self, stats, prs_with_metrics, start_date, end_date, repo_owner, repo_name, author=None
+    ):
         """
         Generate JSON output.
 
@@ -150,8 +158,9 @@ class PRReportGenerator:
             "prs": prs_with_metrics,
         }
 
-    def save_json_output(self, output_data, start_date, end_date, author=None,
-                        output_dir="reports/github"):
+    def save_json_output(
+        self, output_data, start_date, end_date, author=None, output_dir="reports/github"
+    ):
         """
         Save JSON output to file.
 
@@ -179,8 +188,9 @@ class PRReportGenerator:
 
         return filename
 
-    def save_text_report(self, report_text, start_date, end_date, author=None,
-                        output_dir="reports/github"):
+    def save_text_report(
+        self, report_text, start_date, end_date, author=None, output_dir="reports/github"
+    ):
         """
         Save text report to file.
 
@@ -234,8 +244,8 @@ class PRReportGenerator:
 
         # Check if human-specific metrics exist (they were added later)
         has_human_metrics = (
-            "avg_human_reviewers" in overall_stats or
-            "avg_human_substantive_comments" in overall_stats
+            "avg_human_reviewers" in overall_stats
+            or "avg_human_substantive_comments" in overall_stats
         )
 
         # Calculate totals from individual PRs
@@ -254,7 +264,9 @@ class PRReportGenerator:
             "claude_prs": stats.get("claude_prs", 0),
             "cursor_prs": stats.get("cursor_prs", 0),
             "avg_time_to_merge_days": overall_stats.get("avg_time_to_merge_days", 0),
-            "avg_time_to_first_review_hours": overall_stats.get("avg_time_to_first_review_hours", 0),
+            "avg_time_to_first_review_hours": overall_stats.get(
+                "avg_time_to_first_review_hours", 0
+            ),
             "avg_changes_requested": overall_stats.get("avg_changes_requested", 0),
             "avg_commits": overall_stats.get("avg_commits", 0),
             "avg_reviewers": overall_stats.get("avg_reviewers", 0),
@@ -266,7 +278,9 @@ class PRReportGenerator:
             "total_deletions": total_deletions,
             "total_files_changed": total_files_changed,
             "avg_human_reviewers": overall_stats.get("avg_human_reviewers", 0),
-            "avg_human_substantive_comments": overall_stats.get("avg_human_substantive_comments", 0),
+            "avg_human_substantive_comments": overall_stats.get(
+                "avg_human_substantive_comments", 0
+            ),
             "has_human_metrics": has_human_metrics,
         }
 
@@ -366,7 +380,9 @@ class PRReportGenerator:
         # Human Substantive Comments - only show if all reports have this data
         if all(r.get("has_human_metrics", False) for r in reports):
             human_comments = [f"{r['avg_human_substantive_comments']:.2f}" for r in reports]
-            lines.append("Avg Comments per PR (excl. bots & approvals)\t" + "\t".join(human_comments))
+            lines.append(
+                "Avg Comments per PR (excl. bots & approvals)\t" + "\t".join(human_comments)
+            )
 
         # Code Changes - Average per PR
         additions = [f"{r['avg_additions']:.0f}" for r in reports]
@@ -379,13 +395,13 @@ class PRReportGenerator:
         lines.append("Avg Files Changed per PR\t" + "\t".join(files))
 
         # Code Changes - Totals
-        total_additions = [str(r.get('total_additions', 0)) for r in reports]
+        total_additions = [str(r.get("total_additions", 0)) for r in reports]
         lines.append("Total Lines Added\t" + "\t".join(total_additions))
 
-        total_deletions = [str(r.get('total_deletions', 0)) for r in reports]
+        total_deletions = [str(r.get("total_deletions", 0)) for r in reports]
         lines.append("Total Lines Deleted\t" + "\t".join(total_deletions))
 
-        total_files = [str(r.get('total_files_changed', 0)) for r in reports]
+        total_files = [str(r.get("total_files_changed", 0)) for r in reports]
         lines.append("Total Files Changed\t" + "\t".join(total_files))
 
         lines.append("")
@@ -403,57 +419,100 @@ class PRReportGenerator:
             metric_changes = []
 
             # Time to merge
-            add_metric_change(metric_changes, "Avg Time to Merge per PR",
-                            first_report["avg_time_to_merge_days"],
-                            last_report["avg_time_to_merge_days"], "d")
+            add_metric_change(
+                metric_changes,
+                "Avg Time to Merge per PR",
+                first_report["avg_time_to_merge_days"],
+                last_report["avg_time_to_merge_days"],
+                "d",
+            )
 
             # Time to first review
-            add_metric_change(metric_changes, "Avg Time to First Review per PR",
-                            first_report["avg_time_to_first_review_hours"],
-                            last_report["avg_time_to_first_review_hours"], "h")
+            add_metric_change(
+                metric_changes,
+                "Avg Time to First Review per PR",
+                first_report["avg_time_to_first_review_hours"],
+                last_report["avg_time_to_first_review_hours"],
+                "h",
+            )
 
             # Changes requested
-            add_metric_change(metric_changes, "Avg Changes Requested per PR",
-                            first_report["avg_changes_requested"],
-                            last_report["avg_changes_requested"], "")
+            add_metric_change(
+                metric_changes,
+                "Avg Changes Requested per PR",
+                first_report["avg_changes_requested"],
+                last_report["avg_changes_requested"],
+                "",
+            )
 
             # Commits
-            add_metric_change(metric_changes, "Avg Commits per PR",
-                            first_report["avg_commits"],
-                            last_report["avg_commits"], "")
+            add_metric_change(
+                metric_changes,
+                "Avg Commits per PR",
+                first_report["avg_commits"],
+                last_report["avg_commits"],
+                "",
+            )
 
             # Reviewers
-            add_metric_change(metric_changes, "Avg Reviewers per PR",
-                            first_report["avg_reviewers"],
-                            last_report["avg_reviewers"], "")
+            add_metric_change(
+                metric_changes,
+                "Avg Reviewers per PR",
+                first_report["avg_reviewers"],
+                last_report["avg_reviewers"],
+                "",
+            )
 
             # Comments
-            add_metric_change(metric_changes, "Avg Comments per PR",
-                            first_report["avg_comments"],
-                            last_report["avg_comments"], "")
+            add_metric_change(
+                metric_changes,
+                "Avg Comments per PR",
+                first_report["avg_comments"],
+                last_report["avg_comments"],
+                "",
+            )
 
             # Code changes
-            add_metric_change(metric_changes, "Avg Lines Added per PR",
-                            first_report["avg_additions"],
-                            last_report["avg_additions"], "")
+            add_metric_change(
+                metric_changes,
+                "Avg Lines Added per PR",
+                first_report["avg_additions"],
+                last_report["avg_additions"],
+                "",
+            )
 
-            add_metric_change(metric_changes, "Avg Lines Deleted per PR",
-                            first_report["avg_deletions"],
-                            last_report["avg_deletions"], "")
+            add_metric_change(
+                metric_changes,
+                "Avg Lines Deleted per PR",
+                first_report["avg_deletions"],
+                last_report["avg_deletions"],
+                "",
+            )
 
-            add_metric_change(metric_changes, "Avg Files Changed per PR",
-                            first_report["avg_files_changed"],
-                            last_report["avg_files_changed"], "")
+            add_metric_change(
+                metric_changes,
+                "Avg Files Changed per PR",
+                first_report["avg_files_changed"],
+                last_report["avg_files_changed"],
+                "",
+            )
 
             # AI Adoption Rate (special case - absolute change if starting from 0)
             first_ai_rate = first_report["ai_adoption_rate"]
             last_ai_rate = last_report["ai_adoption_rate"]
             if first_ai_rate == 0 and last_ai_rate > 0:
-                add_metric_change(metric_changes, "AI Adoption Rate",
-                                first_ai_rate, last_ai_rate, "%", is_absolute=True)
+                add_metric_change(
+                    metric_changes,
+                    "AI Adoption Rate",
+                    first_ai_rate,
+                    last_ai_rate,
+                    "%",
+                    is_absolute=True,
+                )
             elif first_ai_rate > 0:
-                add_metric_change(metric_changes, "AI Adoption Rate",
-                                first_ai_rate, last_ai_rate, "%")
+                add_metric_change(
+                    metric_changes, "AI Adoption Rate", first_ai_rate, last_ai_rate, "%"
+                )
 
             # Format and append the top changes using shared utility
             formatted_changes = format_metric_changes(metric_changes, top_n=5)

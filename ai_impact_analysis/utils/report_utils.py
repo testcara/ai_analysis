@@ -43,7 +43,7 @@ def normalize_username(username):
     if username.startswith("rh-ee-"):
         username = username[6:]  # len("rh-ee-") = 6
     # Remove -1, -2, etc. suffix
-    username = re.sub(r'-\d+$', '', username)
+    username = re.sub(r"-\d+$", "", username)
     return username
 
 
@@ -149,26 +149,30 @@ def add_metric_change(metric_changes, name, before, after, unit, is_absolute=Fal
     """
     if is_absolute:
         # For absolute changes (e.g., going from 0% to X%)
-        metric_changes.append({
-            "name": name,
-            "before": before,
-            "after": after,
-            "change": after,  # Absolute change
-            "unit": unit,
-            "is_absolute": True
-        })
+        metric_changes.append(
+            {
+                "name": name,
+                "before": before,
+                "after": after,
+                "change": after,  # Absolute change
+                "unit": unit,
+                "is_absolute": True,
+            }
+        )
     else:
         # Regular percentage change
         pct_change = calculate_percentage_change(before, after)
         if pct_change is not None:
-            metric_changes.append({
-                "name": name,
-                "before": before,
-                "after": after,
-                "change": pct_change,
-                "unit": unit,
-                "is_absolute": False
-            })
+            metric_changes.append(
+                {
+                    "name": name,
+                    "before": before,
+                    "after": after,
+                    "change": pct_change,
+                    "unit": unit,
+                    "is_absolute": False,
+                }
+            )
 
 
 def generate_comparison_report(
@@ -179,7 +183,7 @@ def generate_comparison_report(
     output_dir: str = "reports",
     output_file: Optional[str] = None,
     report_type: str = "jira",
-    phase_configs: Optional[List[Tuple[str, str, str]]] = None
+    phase_configs: Optional[List[Tuple[str, str, str]]] = None,
 ) -> str:
     """
     Generate comparison report from multiple phase reports.
@@ -216,19 +220,19 @@ def generate_comparison_report(
 
     # Build kwargs for generate_comparison_tsv
     tsv_kwargs = {
-        'reports': parsed_reports,
-        'phase_names': phase_names,
+        "reports": parsed_reports,
+        "phase_names": phase_names,
     }
 
     # Add identifier (different parameter names for different report types)
     if report_type == "jira":
-        tsv_kwargs['assignee'] = identifier
+        tsv_kwargs["assignee"] = identifier
     else:  # pr
-        tsv_kwargs['author'] = identifier
+        tsv_kwargs["author"] = identifier
 
     # Add phase_configs if available (for displaying phase dates)
     if phase_configs:
-        tsv_kwargs['phase_configs'] = phase_configs
+        tsv_kwargs["phase_configs"] = phase_configs
 
     comparison_tsv = report_generator.generate_comparison_tsv(**tsv_kwargs)
 
@@ -277,9 +281,7 @@ def generate_comparison_report(
 
 
 def combine_comparison_reports(
-    reports_dir: str,
-    report_type: str = "jira",
-    title: Optional[str] = None
+    reports_dir: str, report_type: str = "jira", title: Optional[str] = None
 ) -> str:
     """
     Combine all individual member comparison reports into a single report grouped by metric.
@@ -341,25 +343,30 @@ def combine_comparison_reports(
         in_table = False
 
         for line in lines:
-            line = line.rstrip('\n')
+            line = line.rstrip("\n")
 
             # Skip until we find the header line with "Metric\t"
             if line.startswith("Metric\t"):
                 in_table = True
                 # Extract phase names from header
                 if phase_names is None:
-                    phase_names = line.split('\t')[1:]  # Skip "Metric" column
+                    phase_names = line.split("\t")[1:]  # Skip "Metric" column
                 continue
 
             if not in_table:
                 continue
 
             # Stop at empty line or special sections
-            if not line.strip() or line.startswith("Note:") or line.startswith("Key Changes:") or line.startswith("Top "):
+            if (
+                not line.strip()
+                or line.startswith("Note:")
+                or line.startswith("Key Changes:")
+                or line.startswith("Top ")
+            ):
                 break
 
             # Parse metric line
-            parts = line.split('\t')
+            parts = line.split("\t")
             if len(parts) >= 2:
                 metric_name = parts[0]
                 values = parts[1:]
@@ -381,12 +388,16 @@ def combine_comparison_reports(
     if title:
         lines.append(title)
     else:
-        lines.append(f"{report_type.upper()} AI Impact Analysis - Combined Report (Grouped by Metric)")
+        lines.append(
+            f"{report_type.upper()} AI Impact Analysis - Combined Report (Grouped by Metric)"
+        )
 
     lines.append(f"Generated: {datetime.now().strftime('%B %d, %Y')}")
     lines.append("Project: Konflux UI")
     lines.append("")
-    lines.append(f"This report compares {report_type.upper()} metrics across different time periods")
+    lines.append(
+        f"This report compares {report_type.upper()} metrics across different time periods"
+    )
     lines.append("to evaluate the impact of AI tools on development workflow.")
     lines.append("")
 

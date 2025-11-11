@@ -31,6 +31,7 @@ def check_pythonpath() -> bool:
     # The best way to check is to try importing the package
     try:
         import ai_impact_analysis
+
         print_status(True, "PYTHONPATH configured (package can be imported)")
         return True
     except ImportError:
@@ -101,6 +102,7 @@ def check_config_files() -> bool:
             all_configured = False
             print_status(False, f"{config_file} missing", warning=True)
     return all_configured
+
 
 def check_env_var(var_name: str, required: bool = False) -> bool:
     """Check if an environment variable is set."""
@@ -254,11 +256,11 @@ def check_scripts() -> bool:
         "ai_impact_analysis.scripts.generate_pr_report",
         "ai_impact_analysis.scripts.generate_jira_comparison_report",
         "ai_impact_analysis.scripts.generate_pr_comparison_report",
-        "ai_impact_analysis.scripts.upload_to_sheets"
+        "ai_impact_analysis.scripts.upload_to_sheets",
     ]
 
     all_scripts_ready = True
-    
+
     for script in scripts:
         try:
             result = subprocess.run(
@@ -282,7 +284,6 @@ def print_summary(jira_ready: bool, github_ready: bool, sheets_ready: bool) -> N
     print()
     print_header("Verification Summary")
     print()
-
 
     if jira_ready:
         print_status(True, "Jira connection verified - ready for analysis")

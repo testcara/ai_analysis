@@ -42,13 +42,17 @@ def generate_phase_metrics(
     start_date: str,
     end_date: str,
     author: Optional[str] = None,
-    incremental: bool = False
+    incremental: bool = False,
 ) -> bool:
     """Generate PR metrics for a single phase."""
     args = [
-        sys.executable, "-m", "ai_impact_analysis.scripts.get_pr_metrics",
-        "--start", start_date,
-        "--end", end_date,
+        sys.executable,
+        "-m",
+        "ai_impact_analysis.scripts.get_pr_metrics",
+        "--start",
+        start_date,
+        "--end",
+        end_date,
     ]
 
     if author:
@@ -67,7 +71,9 @@ def generate_phase_metrics(
 def generate_comparison_report(author: Optional[str] = None) -> bool:
     """Generate comparison report from phase metrics."""
     args = [
-        sys.executable, "-m", "ai_impact_analysis.scripts.generate_pr_comparison_report",
+        sys.executable,
+        "-m",
+        "ai_impact_analysis.scripts.generate_pr_comparison_report",
     ]
 
     if author:
@@ -80,7 +86,9 @@ def generate_comparison_report(author: Optional[str] = None) -> bool:
         return False
 
 
-def generate_all_members_reports(team_members_file: Path, script_name: str, no_upload: bool = False) -> int:
+def generate_all_members_reports(
+    team_members_file: Path, script_name: str, no_upload: bool = False
+) -> int:
     """Generate reports for all team members."""
     print_header("Generating reports for all team members")
 
@@ -119,7 +127,9 @@ def generate_all_members_reports(team_members_file: Path, script_name: str, no_u
     # Summary
     print(f"{Colors.GREEN}{'=' * 40}{Colors.NC}")
     if failed_members:
-        print(f"{Colors.YELLOW}⚠ All team member reports completed with {len(failed_members)} failures{Colors.NC}")
+        print(
+            f"{Colors.YELLOW}⚠ All team member reports completed with {len(failed_members)} failures{Colors.NC}"
+        )
         print(f"{Colors.YELLOW}Failed: {', '.join(failed_members)}{Colors.NC}")
     else:
         print(f"{Colors.GREEN}✓ All team member reports completed successfully!{Colors.NC}")
@@ -145,7 +155,7 @@ Examples:
   python3 -m ai_impact_analysis.script.generate_pr_report --all-members      # All members
   python3 -m ai_impact_analysis.script.generate_pr_report --combine-only     # Combine only
   python3 -m ai_impact_analysis.script.generate_pr_report --incremental      # Incremental mode
-        """
+        """,
     )
 
     parser.add_argument(
@@ -190,7 +200,7 @@ Examples:
             output_file = combine_comparison_reports(
                 reports_dir=str(reports_dir),
                 report_type="pr",
-                title="GitHub PR AI Impact Analysis - Combined Report (Grouped by Metric)"
+                title="GitHub PR AI Impact Analysis - Combined Report (Grouped by Metric)",
             )
             print(f"{Colors.GREEN}✓ Combined report generated: {output_file.name}{Colors.NC}")
             print()
@@ -200,7 +210,9 @@ Examples:
                 print(f"{Colors.YELLOW}Uploading to Google Sheets...{Colors.NC}")
                 upload_to_google_sheets(output_file)
             else:
-                print(f"{Colors.YELLOW}Skipping upload to Google Sheets (--no-upload specified){Colors.NC}")
+                print(
+                    f"{Colors.YELLOW}Skipping upload to Google Sheets (--no-upload specified){Colors.NC}"
+                )
 
             print()
             print(f"{Colors.GREEN}{'=' * 40}{Colors.NC}")
@@ -217,7 +229,7 @@ Examples:
         return generate_all_members_reports(
             config_file,  # Use same config file for team members
             "ai_impact_analysis.scripts.generate_pr_report",
-            no_upload=args.no_upload
+            no_upload=args.no_upload,
         )
 
     # Load configuration
@@ -247,14 +259,12 @@ Examples:
     step_num = 2
 
     for phase_name, start_date, end_date in phases:
-        print(f"{Colors.YELLOW}Step {step_num}: Collecting PR metrics for '{phase_name}' ({start_date} to {end_date})...{Colors.NC}")
+        print(
+            f"{Colors.YELLOW}Step {step_num}: Collecting PR metrics for '{phase_name}' ({start_date} to {end_date})...{Colors.NC}"
+        )
 
         success = generate_phase_metrics(
-            phase_name,
-            start_date,
-            end_date,
-            author=author,
-            incremental=args.incremental
+            phase_name, start_date, end_date, author=author, incremental=args.incremental
         )
 
         if success:
@@ -281,7 +291,9 @@ Examples:
         if not args.no_upload:
             upload_to_google_sheets(comparison_file)
         else:
-            print(f"{Colors.YELLOW}Skipping upload to Google Sheets (--no-upload specified){Colors.NC}")
+            print(
+                f"{Colors.YELLOW}Skipping upload to Google Sheets (--no-upload specified){Colors.NC}"
+            )
             print()
 
     print(f"{Colors.GREEN}Done!{Colors.NC}")

@@ -11,8 +11,8 @@ Skip with: pytest tests/ --ignore=tests/test_integration.py
 
 import os
 import pytest
-from ai_impact_analysis.jira_client import JiraClient
-from ai_impact_analysis.utils import build_jql_query
+from ai_impact_analysis.clients.jira_client import JiraClient
+from ai_impact_analysis.utils.core_utils import build_jql_query
 
 
 @pytest.mark.skipif(

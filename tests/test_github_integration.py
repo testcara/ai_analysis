@@ -15,7 +15,7 @@ import os
 import pytest
 from datetime import datetime, timedelta
 
-from ai_impact_analysis.github_client import GitHubClient
+from ai_impact_analysis.clients.github_client import GitHubClient
 
 
 # Skip all tests if GitHub credentials not available

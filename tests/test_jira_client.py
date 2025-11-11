@@ -2,7 +2,7 @@
 
 import requests
 from unittest.mock import Mock, patch
-from ai_impact_analysis.jira_client import JiraClient
+from ai_impact_analysis.clients.jira_client import JiraClient
 
 
 class TestJiraClient:
@@ -23,7 +23,7 @@ class TestJiraClient:
         assert client.jira_url == "https://custom.jira.com"
         assert client.api_token == "custom-token"
 
-    @patch("ai_impact_analysis.jira_client.requests.get")
+    @patch("ai_impact_analysis.clients.jira_client.requests.get")
     def test_fetch_jira_data_success(self, mock_get):
         """Test successful Jira data fetch."""
         mock_response = Mock()
@@ -39,7 +39,7 @@ class TestJiraClient:
         assert result["total"] == 10
         mock_get.assert_called_once()
 
-    @patch("ai_impact_analysis.jira_client.requests.get")
+    @patch("ai_impact_analysis.clients.jira_client.requests.get")
     def test_fetch_jira_data_error(self, mock_get):
         """Test Jira data fetch with error."""
         mock_response = Mock()
@@ -54,7 +54,7 @@ class TestJiraClient:
 
         assert result is None
 
-    @patch("ai_impact_analysis.jira_client.requests.get")
+    @patch("ai_impact_analysis.clients.jira_client.requests.get")
     def test_fetch_all_issues(self, mock_get):
         """Test fetching all issues with pagination."""
         # First call returns total count

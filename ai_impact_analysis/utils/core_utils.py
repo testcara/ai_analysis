@@ -225,5 +225,5 @@ def normalize_username(username):
     if username.startswith("rh-ee-"):
         username = username[6:]  # len("rh-ee-") = 6
     # Remove -1, -2, etc. suffix
-    username = re.sub(r'-\d+$', '', username)
+    username = re.sub(r"-\d+$", "", username)
     return username

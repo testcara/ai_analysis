@@ -85,7 +85,9 @@ class PRMetricsCalculator:
             "total_prs": len(prs_with_metrics),
             "ai_assisted_prs": len(ai_prs),
             "non_ai_prs": len(non_ai_prs),
-            "ai_adoption_rate": (len(ai_prs) / len(prs_with_metrics) * 100) if prs_with_metrics else 0,
+            "ai_adoption_rate": (
+                (len(ai_prs) / len(prs_with_metrics) * 100) if prs_with_metrics else 0
+            ),
             # By tool
             "claude_prs": len(claude_prs),
             "cursor_prs": len(cursor_prs),
@@ -133,6 +135,7 @@ class PRMetricsCalculator:
         Returns:
             Dictionary with overall metrics
         """
+
         def avg(values):
             return sum(values) / len(values) if values else 0
 
@@ -155,7 +158,9 @@ class PRMetricsCalculator:
             pr["total_commits"] for pr in prs_with_metrics if pr.get("total_commits") is not None
         ]
         reviewers = [
-            pr["reviewers_count"] for pr in prs_with_metrics if pr.get("reviewers_count") is not None
+            pr["reviewers_count"]
+            for pr in prs_with_metrics
+            if pr.get("reviewers_count") is not None
         ]
         comments = [
             pr["total_comments_count"]
@@ -164,7 +169,9 @@ class PRMetricsCalculator:
         ]
         additions = [pr["additions"] for pr in prs_with_metrics if pr.get("additions") is not None]
         deletions = [pr["deletions"] for pr in prs_with_metrics if pr.get("deletions") is not None]
-        files = [pr["changed_files"] for pr in prs_with_metrics if pr.get("changed_files") is not None]
+        files = [
+            pr["changed_files"] for pr in prs_with_metrics if pr.get("changed_files") is not None
+        ]
 
         # Human-only metrics (excluding bots like CodeRabbit)
         human_reviewers = [

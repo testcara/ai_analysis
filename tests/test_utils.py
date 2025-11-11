@@ -1,7 +1,7 @@
 """Tests for utility functions."""
 
 from datetime import datetime
-from ai_impact_analysis.utils import (
+from ai_impact_analysis.utils.core_utils import (
     convert_date_to_jql,
     parse_datetime,
     build_jql_query,

@@ -170,9 +170,13 @@ Examples:
                         metrics = future.result()
                         if metrics:
                             prs_with_metrics.append(metrics)
-                            print(f"  ✓ [{completed}/{len(prs)}] PR #{pr['number']}: {pr['title'][:60]}")
+                            print(
+                                f"  ✓ [{completed}/{len(prs)}] PR #{pr['number']}: {pr['title'][:60]}"
+                            )
                         else:
-                            print(f"  ✗ [{completed}/{len(prs)}] PR #{pr['number']}: Failed to analyze")
+                            print(
+                                f"  ✗ [{completed}/{len(prs)}] PR #{pr['number']}: Failed to analyze"
+                            )
                     except Exception as e:
                         print(f"  ✗ [{completed}/{len(prs)}] PR #{pr['number']}: {e}")
 
@@ -180,6 +184,7 @@ Examples:
     except Exception as e:
         print(f"Error fetching PRs: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 
@@ -195,14 +200,24 @@ Examples:
     # Generate reports using core logic
     report_gen = PRReportGenerator()
     text_report = report_gen.generate_text_report(
-        stats, prs_with_metrics, args.start, args.end,
-        client.repo_owner, client.repo_name, args.author
+        stats,
+        prs_with_metrics,
+        args.start,
+        args.end,
+        client.repo_owner,
+        client.repo_name,
+        args.author,
     )
 
     # Prepare JSON output
     output_data = report_gen.generate_json_output(
-        stats, prs_with_metrics, args.start, args.end,
-        client.repo_owner, client.repo_name, args.author
+        stats,
+        prs_with_metrics,
+        args.start,
+        args.end,
+        client.repo_owner,
+        client.repo_name,
+        args.author,
     )
 
     # Save outputs
@@ -210,6 +225,7 @@ Examples:
         json_file = args.output
         with open(json_file, "w", encoding="utf-8") as f:
             import json
+
             json.dump(output_data, f, indent=2, ensure_ascii=False)
         txt_file = None
     else:

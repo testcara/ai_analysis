@@ -21,9 +21,17 @@ from ai_impact_analysis.utils.report_utils import (
 class JiraReportGenerator:
     """Generates reports from Jira metrics data."""
 
-
-    def generate_text_report(self, metrics, jql_query, project_key, assignee=None,
-                            start_date=None, end_date=None, leave_days=0, capacity=1.0):
+    def generate_text_report(
+        self,
+        metrics,
+        jql_query,
+        project_key,
+        assignee=None,
+        start_date=None,
+        end_date=None,
+        leave_days=0,
+        capacity=1.0,
+    ):
         """
         Generate human-readable text report from metrics.
 
@@ -62,8 +70,8 @@ class JiraReportGenerator:
             report_lines.append(f"End: {end_date}")
 
             # Calculate phase days
-            phase_start = datetime.strptime(start_date, '%Y-%m-%d')
-            phase_end = datetime.strptime(end_date, '%Y-%m-%d')
+            phase_start = datetime.strptime(start_date, "%Y-%m-%d")
+            phase_end = datetime.strptime(end_date, "%Y-%m-%d")
             phase_days = (phase_end - phase_start).days + 1  # Inclusive
 
             # Show leave days info
@@ -164,9 +172,13 @@ class JiraReportGenerator:
                 avg_transitions = stats["total_count"] / stats["issue_count"]
                 report_lines.append(f"\n{state}:")
                 report_lines.append(f"  - {stats['issue_count']} issues experienced this state")
-                report_lines.append(f"  - Average times per issue entering this state {avg_transitions:.2f} times")
+                report_lines.append(
+                    f"  - Average times per issue entering this state {avg_transitions:.2f} times"
+                )
                 if avg_transitions > 1.5:
-                    report_lines.append("  ⚠️  Warning: This state was entered multiple times, indicating possible back-and-forth transitions")
+                    report_lines.append(
+                        "  ⚠️  Warning: This state was entered multiple times, indicating possible back-and-forth transitions"
+                    )
         else:
             report_lines.append("\nAnalyzed 0 issues state transitions")
             report_lines.append(
@@ -179,8 +191,16 @@ class JiraReportGenerator:
 
         return "\n".join(report_lines)
 
-    def generate_json_output(self, metrics, jql_query, project_key, start_date, end_date,
-                            assignee=None, velocity_stats=None):
+    def generate_json_output(
+        self,
+        metrics,
+        jql_query,
+        project_key,
+        start_date,
+        end_date,
+        assignee=None,
+        velocity_stats=None,
+    ):
         """
         Generate JSON output from metrics.
 
@@ -271,8 +291,9 @@ class JiraReportGenerator:
 
         return filename
 
-    def save_json_output(self, output_data, start_date, end_date, assignee=None,
-                        output_dir="reports/jira"):
+    def save_json_output(
+        self, output_data, start_date, end_date, assignee=None, output_dir="reports/jira"
+    ):
         """
         Save JSON output to file.
 
@@ -297,7 +318,7 @@ class JiraReportGenerator:
             identifier = "general"
 
         filename = os.path.join(
-            output_dir, f'jira_metrics_{identifier}_{start_formatted}_{end_formatted}.json'
+            output_dir, f"jira_metrics_{identifier}_{start_formatted}_{end_formatted}.json"
         )
 
         with open(filename, "w", encoding="utf-8") as f:
@@ -379,7 +400,9 @@ class JiraReportGenerator:
             if in_issue_types:
                 if line.startswith("---"):
                     break
-                match = re.match(r"\s*(Story|Task|Bug|Epic|Sub-task)\s+(\d+)\s*\(\s*([\d.]+)%\)", line)
+                match = re.match(
+                    r"\s*(Story|Task|Bug|Epic|Sub-task)\s+(\d+)\s*\(\s*([\d.]+)%\)", line
+                )
                 if match:
                     issue_type, count, percentage = match.groups()
                     data["issue_types"][issue_type] = {
@@ -397,9 +420,14 @@ class JiraReportGenerator:
                 if line.startswith("---"):
                     break
                 line_stripped = line.strip()
-                if line_stripped and not line_stripped.startswith("State") and not line_stripped.startswith("="):
+                if (
+                    line_stripped
+                    and not line_stripped.startswith("State")
+                    and not line_stripped.startswith("=")
+                ):
                     match = re.match(
-                        r"^(\S+(?:\s+\S+)?)\s+(\d+)\s+(\d+)\s+([-\d.]+)\s*(days|hours)", line_stripped
+                        r"^(\S+(?:\s+\S+)?)\s+(\d+)\s+(\d+)\s+([-\d.]+)\s*(days|hours)",
+                        line_stripped,
                     )
                     if match:
                         state_name = match.group(1).strip()
@@ -414,7 +442,14 @@ class JiraReportGenerator:
         for line in lines:
             if line.strip().endswith(":") and not line.startswith("-"):
                 state_candidate = line.strip().rstrip(":")
-                if state_candidate in ["To Do", "In Progress", "Review", "New", "Waiting", "Release Pending"]:
+                if state_candidate in [
+                    "To Do",
+                    "In Progress",
+                    "Review",
+                    "New",
+                    "Waiting",
+                    "Release Pending",
+                ]:
                     current_state = state_candidate
             elif current_state and "Average times per issue entering this state" in line:
                 match = re.search(r"([\d.]+)\s*times", line)
@@ -423,8 +458,7 @@ class JiraReportGenerator:
 
         return data
 
-    def generate_comparison_tsv(self, reports, phase_names, assignee=None,
-                                phase_configs=None):
+    def generate_comparison_tsv(self, reports, phase_names, assignee=None, phase_configs=None):
         """
         Generate TSV comparison report from multiple phase reports.
 
@@ -450,7 +484,9 @@ class JiraReportGenerator:
 
         # Add description for multi-phase analysis
         if len(reports) >= 2:
-            lines.append("This report analyzes development data across multiple periods to evaluate")
+            lines.append(
+                "This report analyzes development data across multiple periods to evaluate"
+            )
             lines.append("the impact of AI tools on team efficiency:")
             lines.append("")
 
@@ -546,7 +582,9 @@ class JiraReportGenerator:
                 throughputs_both.append(f"{throughput:.2f}/d")
             else:
                 throughputs_both.append("N/A")
-        lines.append("Daily Throughput (considering leave days + capacity)\t" + "\t".join(throughputs_both))
+        lines.append(
+            "Daily Throughput (considering leave days + capacity)\t" + "\t".join(throughputs_both)
+        )
 
         # Daily throughput = Total Issues / Analysis Period
         throughputs = []
@@ -590,8 +628,12 @@ class JiraReportGenerator:
             lines.append(f"{itype} Percentage\t" + "\t".join(values))
 
         lines.append("")
-        lines.append("Note: N/A values indicate no issues entered that workflow state during the period.")
-        lines.append("This can be positive (e.g., no blocked issues) or indicate the state isn't used in your workflow.")
+        lines.append(
+            "Note: N/A values indicate no issues entered that workflow state during the period."
+        )
+        lines.append(
+            "This can be positive (e.g., no blocked issues) or indicate the state isn't used in your workflow."
+        )
 
         # Calculate metric changes (first phase vs last phase) - only if we have 2+ reports
         if len(reports) >= 2:
@@ -619,7 +661,9 @@ class JiraReportGenerator:
             for state in reentry_states:
                 first_rate = first_report["state_reentry"].get(state, 0)
                 last_rate = last_report["state_reentry"].get(state, 0)
-                add_metric_change(metric_changes, f"{state} Re-entry Rate", first_rate, last_rate, "x")
+                add_metric_change(
+                    metric_changes, f"{state} Re-entry Rate", first_rate, last_rate, "x"
+                )
 
             # Format and append the top changes using shared utility
             formatted_changes = format_metric_changes(metric_changes, top_n=5)

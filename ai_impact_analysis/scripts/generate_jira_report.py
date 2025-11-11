@@ -44,13 +44,17 @@ def generate_phase_report(
     assignee: Optional[str] = None,
     config_file: Optional[Path] = None,
     leave_days: int = 0,
-    capacity: float = 1.0
+    capacity: float = 1.0,
 ) -> bool:
     """Generate report for a single phase."""
     args = [
-        sys.executable, "-m", "ai_impact_analysis.scripts.get_jira_metrics",
-        "--start", start_date,
-        "--end", end_date,
+        sys.executable,
+        "-m",
+        "ai_impact_analysis.scripts.get_jira_metrics",
+        "--start",
+        start_date,
+        "--end",
+        end_date,
     ]
 
     if assignee:
@@ -74,7 +78,9 @@ def generate_phase_report(
 def generate_comparison_report(assignee: Optional[str] = None) -> bool:
     """Generate comparison report from phase reports."""
     args = [
-        sys.executable, "-m", "ai_impact_analysis.scripts.generate_jira_comparison_report",
+        sys.executable,
+        "-m",
+        "ai_impact_analysis.scripts.generate_jira_comparison_report",
     ]
 
     if assignee:
@@ -87,7 +93,9 @@ def generate_comparison_report(assignee: Optional[str] = None) -> bool:
         return False
 
 
-def generate_all_members_reports(team_members_file: Path, script_name: str, no_upload: bool = False) -> int:
+def generate_all_members_reports(
+    team_members_file: Path, script_name: str, no_upload: bool = False
+) -> int:
     """Generate reports for all team members."""
     print_header("Generating reports for all team members")
 
@@ -126,7 +134,9 @@ def generate_all_members_reports(team_members_file: Path, script_name: str, no_u
     # Summary
     print(f"{Colors.GREEN}{'=' * 40}{Colors.NC}")
     if failed_members:
-        print(f"{Colors.YELLOW}⚠ All team member reports completed with {len(failed_members)} failures{Colors.NC}")
+        print(
+            f"{Colors.YELLOW}⚠ All team member reports completed with {len(failed_members)} failures{Colors.NC}"
+        )
         print(f"{Colors.YELLOW}Failed: {', '.join(failed_members)}{Colors.NC}")
     else:
         print(f"{Colors.GREEN}✓ All team member reports completed successfully!{Colors.NC}")
@@ -151,7 +161,7 @@ Examples:
   python3 -m ai_impact_analysis.script.generate_jira_report wlin@redhat.com     # Individual
   python3 -m ai_impact_analysis.script.generate_jira_report --all-members        # All members
   python3 -m ai_impact_analysis.script.generate_jira_report --combine-only       # Combine only
-        """
+        """,
     )
 
     parser.add_argument(
@@ -188,7 +198,11 @@ Examples:
     custom_config_file = Path(args.config) if args.config else None
 
     # Use custom config if provided, otherwise use default
-    config_file = custom_config_file if custom_config_file and custom_config_file.exists() else default_config_file
+    config_file = (
+        custom_config_file
+        if custom_config_file and custom_config_file.exists()
+        else default_config_file
+    )
     reports_dir = project_root / "reports" / "jira"
 
     # Handle --combine-only flag
@@ -201,7 +215,7 @@ Examples:
             output_file = combine_comparison_reports(
                 reports_dir=str(reports_dir),
                 report_type="jira",
-                title="Jira AI Impact Analysis - Combined Report (Grouped by Metric)"
+                title="Jira AI Impact Analysis - Combined Report (Grouped by Metric)",
             )
             print(f"{Colors.GREEN}✓ Combined report generated: {output_file.name}{Colors.NC}")
             print()
@@ -210,6 +224,7 @@ Examples:
         except Exception as e:
             print(f"{Colors.RED}Error combining reports: {e}{Colors.NC}")
             import traceback
+
             traceback.print_exc()
             return 1
 
@@ -220,7 +235,7 @@ Examples:
         return generate_all_members_reports(
             config_file,  # Use same config file for team members
             "ai_impact_analysis.scripts.generate_jira_report",
-            no_upload=args.no_upload
+            no_upload=args.no_upload,
         )
 
     # Load configuration (with custom config merge if provided)
@@ -260,14 +275,15 @@ Examples:
     leave_days_list = None
     capacity_list = None
     from ai_impact_analysis.utils.workflow_utils import load_team_members_from_yaml
+
     team_members_details = load_team_members_from_yaml(config_file, detailed=True)
 
     if assignee:
         # Individual report: get specific member's values
         for identifier, details in team_members_details.items():
-            if identifier == assignee or details.get('member') == assignee:
+            if identifier == assignee or details.get("member") == assignee:
                 # Process leave_days
-                leave_days_config = details.get('leave_days', 0)
+                leave_days_config = details.get("leave_days", 0)
                 if isinstance(leave_days_config, list):
                     leave_days_list = leave_days_config
                 else:
@@ -275,7 +291,7 @@ Examples:
                     leave_days_list = [leave_days_config] * len(phases)
 
                 # Process capacity
-                capacity_config = details.get('capacity', 1.0)
+                capacity_config = details.get("capacity", 1.0)
                 if isinstance(capacity_config, list):
                     capacity_list = capacity_config
                 else:
@@ -290,7 +306,7 @@ Examples:
 
         for identifier, details in team_members_details.items():
             # Process leave_days
-            leave_days_config = details.get('leave_days', 0)
+            leave_days_config = details.get("leave_days", 0)
             if isinstance(leave_days_config, list):
                 for i, ld in enumerate(leave_days_config):
                     if i < len(leave_days_list):
@@ -301,7 +317,7 @@ Examples:
                     leave_days_list[i] += leave_days_config
 
             # Process capacity
-            capacity_config = details.get('capacity', 1.0)
+            capacity_config = details.get("capacity", 1.0)
             if isinstance(capacity_config, list):
                 for i, cap in enumerate(capacity_config):
                     if i < len(capacity_list):
@@ -312,7 +328,9 @@ Examples:
                     capacity_list[i] += capacity_config
 
     for phase_index, (phase_name, start_date, end_date) in enumerate(phases):
-        print(f"{Colors.YELLOW}Step {step_num}: Generating report for '{phase_name}' ({start_date} to {end_date})...{Colors.NC}")
+        print(
+            f"{Colors.YELLOW}Step {step_num}: Generating report for '{phase_name}' ({start_date} to {end_date})...{Colors.NC}"
+        )
 
         # Get leave_days for this phase
         phase_leave_days = 0
@@ -331,7 +349,7 @@ Examples:
             assignee=assignee,
             config_file=team_config_file,
             leave_days=phase_leave_days,
-            capacity=phase_capacity
+            capacity=phase_capacity,
         )
 
         if success:
@@ -358,7 +376,9 @@ Examples:
         if not args.no_upload:
             upload_to_google_sheets(comparison_file)
         else:
-            print(f"{Colors.YELLOW}Skipping upload to Google Sheets (--no-upload specified){Colors.NC}")
+            print(
+                f"{Colors.YELLOW}Skipping upload to Google Sheets (--no-upload specified){Colors.NC}"
+            )
             print()
 
     print(f"{Colors.GREEN}Done!{Colors.NC}")

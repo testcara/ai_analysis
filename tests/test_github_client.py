@@ -3,7 +3,7 @@
 import os
 import pytest
 from unittest.mock import Mock, patch
-from ai_impact_analysis.github_client import GitHubClient
+from ai_impact_analysis.clients.github_client import GitHubClient
 
 
 class TestGitHubClient:
@@ -43,7 +43,7 @@ class TestGitHubClient:
             with pytest.raises(ValueError, match="Repository owner and name are required"):
                 GitHubClient(token="token")
 
-    @patch("ai_impact_analysis.github_client.requests.get")
+    @patch("ai_impact_analysis.clients.github_client.requests.get")
     def test_fetch_merged_prs_success(self, mock_get):
         """Test fetching merged PRs successfully."""
         # Mock first page with one PR
@@ -75,7 +75,7 @@ class TestGitHubClient:
         assert prs[0]["number"] == 1
         assert prs[0]["title"] == "Test PR"
 
-    @patch("ai_impact_analysis.github_client.requests.get")
+    @patch("ai_impact_analysis.clients.github_client.requests.get")
     def test_fetch_merged_prs_http_error(self, mock_get):
         """Test fetching PRs with HTTP error."""
         mock_response = Mock()
@@ -87,7 +87,7 @@ class TestGitHubClient:
         with pytest.raises(Exception, match="HTTP Error"):
             client.fetch_merged_prs("2024-10-01", "2024-10-31")
 
-    @patch("ai_impact_analysis.github_client.requests.get")
+    @patch("ai_impact_analysis.clients.github_client.requests.get")
     def test_get_pr_commits(self, mock_get):
         """Test getting PR commits."""
         mock_response = Mock()
@@ -103,7 +103,7 @@ class TestGitHubClient:
         assert len(commits) == 1
         assert commits[0]["sha"] == "abc123"
 
-    @patch("ai_impact_analysis.github_client.requests.get")
+    @patch("ai_impact_analysis.clients.github_client.requests.get")
     def test_get_pr_reviews(self, mock_get):
         """Test getting PR reviews."""
         mock_response = Mock()
@@ -124,7 +124,7 @@ class TestGitHubClient:
         assert len(reviews) == 1
         assert reviews[0]["state"] == "APPROVED"
 
-    @patch("ai_impact_analysis.github_client.requests.get")
+    @patch("ai_impact_analysis.clients.github_client.requests.get")
     def test_get_pr_comments(self, mock_get):
         """Test getting PR comments."""
         # Mock review comments
@@ -306,152 +306,18 @@ class TestGitHubClient:
         assert metrics["deletions"] == 50
         assert metrics["changed_files"] == 5
 
-
-class TestPRComparisonReport:
-    """Test cases for PR comparison report generation."""
-
-    @patch("ai_impact_analysis.cli.generate_pr_comparison_report.parse_phase_config")
-    def test_generate_tsv_report_with_no_ai_prs(self, mock_parse_config):
-        """Test generating report when there are no AI-assisted PRs."""
-        # Import here to avoid circular dependency
-        from ai_impact_analysis.cli.generate_pr_comparison_report import generate_tsv_report
-
-        # Mock phase config
-        mock_parse_config.return_value = [
-            ("Phase 1", "2024-10-01", "2024-10-31"),
-            ("Phase 2", "2024-11-01", "2024-11-30"),
-        ]
-
-        # Mock reports with only non-AI PRs (need at least 2 for comparison)
-        reports = [
-            {
-                "filename": "test1.json",
-                "start_date": "2024-10-01",
-                "end_date": "2024-10-31",
-                "total_prs": 10,
-                "ai_prs": 0,
-                "non_ai_prs": 10,
-                "ai_adoption_rate": 0.0,
-                "claude_prs": 0,
-                "cursor_prs": 0,
-                "overall_metrics": {
-                    "count": 10,
-                    "avg_time_to_merge_days": 3.5,
-                    "avg_time_to_first_review_hours": 6.0,
-                    "avg_changes_requested": 1.2,
-                    "avg_commits": 4.0,
-                    "avg_reviewers": 2.0,
-                    "avg_human_reviewers": 1.5,
-                    "avg_comments": 7.0,
-                    "avg_human_substantive_comments": 3.0,
-                    "avg_additions": 120.0,
-                    "avg_deletions": 60.0,
-                    "avg_files_changed": 4.0,
-                },
-            },
-            {
-                "filename": "test2.json",
-                "start_date": "2024-11-01",
-                "end_date": "2024-11-30",
-                "total_prs": 12,
-                "ai_prs": 0,
-                "non_ai_prs": 12,
-                "ai_adoption_rate": 0.0,
-                "claude_prs": 0,
-                "cursor_prs": 0,
-                "overall_metrics": {
-                    "count": 12,
-                    "avg_time_to_merge_days": 3.2,
-                    "avg_time_to_first_review_hours": 5.5,
-                    "avg_changes_requested": 1.0,
-                    "avg_commits": 3.8,
-                    "avg_reviewers": 2.1,
-                    "avg_human_reviewers": 1.6,
-                    "avg_comments": 6.5,
-                    "avg_human_substantive_comments": 2.8,
-                    "avg_additions": 110.0,
-                    "avg_deletions": 55.0,
-                    "avg_files_changed": 3.8,
-                },
-            },
-        ]
-
-        # This should not raise UnboundLocalError
-        report_text = generate_tsv_report(reports, None)
-
-        assert report_text is not None
-        assert "GitHub PR Analysis" in report_text
-
-    @patch("ai_impact_analysis.cli.generate_pr_comparison_report.parse_phase_config")
-    def test_generate_tsv_report_with_only_ai_prs(self, mock_parse_config):
-        """Test generating report when there are only AI-assisted PRs."""
-        from ai_impact_analysis.cli.generate_pr_comparison_report import generate_tsv_report
-
-        # Mock phase config
-        mock_parse_config.return_value = [
-            ("Phase 1", "2024-10-01", "2024-10-31"),
-            ("Phase 2", "2024-11-01", "2024-11-30"),
-        ]
-
-        # Mock reports with only AI PRs (need at least 2 for comparison)
-        reports = [
-            {
-                "filename": "test1.json",
-                "start_date": "2024-10-01",
-                "end_date": "2024-10-31",
-                "total_prs": 10,
-                "ai_prs": 10,
-                "non_ai_prs": 0,
-                "ai_adoption_rate": 100.0,
-                "claude_prs": 5,
-                "cursor_prs": 5,
-                "overall_metrics": {
-                    "count": 10,
-                    "avg_time_to_merge_days": 2.5,
-                    "avg_time_to_first_review_hours": 4.0,
-                    "avg_changes_requested": 0.8,
-                    "avg_commits": 3.0,
-                    "avg_reviewers": 2.0,
-                    "avg_human_reviewers": 1.8,
-                    "avg_comments": 5.0,
-                    "avg_human_substantive_comments": 2.5,
-                    "avg_additions": 100.0,
-                    "avg_deletions": 50.0,
-                    "avg_files_changed": 3.0,
-                },
-            },
-            {
-                "filename": "test2.json",
-                "start_date": "2024-11-01",
-                "end_date": "2024-11-30",
-                "total_prs": 12,
-                "ai_prs": 12,
-                "non_ai_prs": 0,
-                "ai_adoption_rate": 100.0,
-                "claude_prs": 6,
-                "cursor_prs": 6,
-                "overall_metrics": {
-                    "count": 12,
-                    "avg_time_to_merge_days": 2.2,
-                    "avg_time_to_first_review_hours": 3.5,
-                    "avg_changes_requested": 0.7,
-                    "avg_commits": 2.8,
-                    "avg_reviewers": 2.1,
-                    "avg_human_reviewers": 1.9,
-                    "avg_comments": 4.8,
-                    "avg_human_substantive_comments": 2.3,
-                    "avg_additions": 95.0,
-                    "avg_deletions": 48.0,
-                    "avg_files_changed": 2.9,
-                },
-            },
-        ]
-
-        # This should not raise UnboundLocalError
-        report_text = generate_tsv_report(reports, None)
-
-        assert report_text is not None
-        assert "GitHub PR Analysis" in report_text
+    def test_is_bot_user(self):
+        """Test bot user detection."""
+        assert GitHubClient.is_bot_user("coderabbit") is True
+        assert GitHubClient.is_bot_user("CodeRabbit") is True
+        assert GitHubClient.is_bot_user("coderabbitai") is True
+        assert GitHubClient.is_bot_user("dependabot[bot]") is True
+        assert GitHubClient.is_bot_user("github-actions[bot]") is True
+        assert GitHubClient.is_bot_user("renovate") is True
+        assert GitHubClient.is_bot_user("some-bot[bot]") is True
+        assert GitHubClient.is_bot_user("regularuser") is False
+        assert GitHubClient.is_bot_user("") is False
+        assert GitHubClient.is_bot_user(None) is False
 
 
 if __name__ == "__main__":

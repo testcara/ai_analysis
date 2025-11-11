@@ -35,10 +35,7 @@ class JiraMetricsCalculator:
         self.project_key = project_key or os.getenv("JIRA_PROJECT_KEY", "Konflux UI")
 
         # Setup authentication headers
-        self.headers = {
-            "Accept": "application/json",
-            "authorization": f"Bearer {self.jira_token}"
-        }
+        self.headers = {"Accept": "application/json", "authorization": f"Bearer {self.jira_token}"}
 
     def fetch_jira_data(self, jql_query, start_at=0, max_results=50, expand=None):
         """
@@ -219,8 +216,15 @@ class JiraMetricsCalculator:
         except ValueError:
             return f'"{date_str}"'
 
-    def build_jql_query(self, project_key=None, assignee=None, team_members_file=None,
-                       start_date=None, end_date=None, status=None):
+    def build_jql_query(
+        self,
+        project_key=None,
+        assignee=None,
+        team_members_file=None,
+        start_date=None,
+        end_date=None,
+        status=None,
+    ):
         """
         Build JQL query based on filters.
 
@@ -250,8 +254,10 @@ class JiraMetricsCalculator:
                 team_members = load_team_members_from_yaml(Path(team_members_file))
 
                 if team_members:
-                    assignee_conditions = ' OR '.join([f'assignee = "{member}"' for member in team_members])
-                    jql_parts.append(f'({assignee_conditions})')
+                    assignee_conditions = " OR ".join(
+                        [f'assignee = "{member}"' for member in team_members]
+                    )
+                    jql_parts.append(f"({assignee_conditions})")
                     print(f"Limiting to team members from config: {len(team_members)} members")
                     print(f"Team members: {', '.join(team_members)}")
                 else:

@@ -316,7 +316,7 @@ def get_service_account_email(credentials_file=None):
         return None
 
     try:
-        with open(credentials_file, 'r') as f:
+        with open(credentials_file, "r") as f:
             creds_data = json.load(f)
             return creds_data.get("client_email")
     except Exception:

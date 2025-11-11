@@ -157,7 +157,7 @@ def main():
         identifier=args.author,
         output_dir="reports/github",
         output_file=args.output,
-        report_type="pr"
+        report_type="pr",
     )
 
     return 0

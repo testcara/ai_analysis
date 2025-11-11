@@ -19,7 +19,7 @@ from ai_impact_analysis.utils.logger import Colors
 def get_project_root() -> Path:
     """
     Get the project root directory by searching for marker files.
-    
+
     Searches upward from current file for .git directory or other markers.
     """
     current = Path(__file__).resolve()
@@ -27,17 +27,18 @@ def get_project_root() -> Path:
     # Search upward for project markers
     for parent in [current, *current.parents]:
         # Check for common project root markers
-        if any([
-            (parent / '.git').exists(),
-            (parent / 'pyproject.toml').exists(),
-            (parent / 'setup.py').exists(),
-            (parent / 'requirements.txt').exists() and (parent / 'ai_impact_analysis').is_dir(),
-        ]):
+        if any(
+            [
+                (parent / ".git").exists(),
+                (parent / "pyproject.toml").exists(),
+                (parent / "setup.py").exists(),
+                (parent / "requirements.txt").exists() and (parent / "ai_impact_analysis").is_dir(),
+            ]
+        ):
             return parent
 
     # Fallback: assume current working directory
     return Path.cwd()
-
 
 
 def merge_configs(default_config: Dict[str, Any], custom_config: Dict[str, Any]) -> Dict[str, Any]:
@@ -64,7 +65,9 @@ def merge_configs(default_config: Dict[str, Any], custom_config: Dict[str, Any])
     return merged
 
 
-def load_config_file(config_path: Path, custom_config_path: Optional[Path] = None) -> Tuple[List[Tuple[str, str, str]], str]:
+def load_config_file(
+    config_path: Path, custom_config_path: Optional[Path] = None
+) -> Tuple[List[Tuple[str, str, str]], str]:
     """
     Load phase configuration from a YAML config file with optional custom config override.
 
@@ -84,7 +87,7 @@ def load_config_file(config_path: Path, custom_config_path: Optional[Path] = Non
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             config = yaml.safe_load(f)
     except yaml.YAMLError as e:
         raise ValueError(f"Invalid YAML format in {config_path}: {e}")
@@ -95,7 +98,7 @@ def load_config_file(config_path: Path, custom_config_path: Optional[Path] = Non
     # Merge with custom config if provided
     if custom_config_path and custom_config_path.exists():
         try:
-            with open(custom_config_path, 'r') as f:
+            with open(custom_config_path, "r") as f:
                 custom_config = yaml.safe_load(f)
             if custom_config:
                 config = merge_configs(config, custom_config)
@@ -105,11 +108,11 @@ def load_config_file(config_path: Path, custom_config_path: Optional[Path] = Non
 
     # Extract phases
     phases = []
-    if 'phases' in config and config['phases']:
-        for phase in config['phases']:
-            name = phase.get('name', '')
-            start = phase.get('start', '')
-            end = phase.get('end', '')
+    if "phases" in config and config["phases"]:
+        for phase in config["phases"]:
+            name = phase.get("name", "")
+            start = phase.get("start", "")
+            end = phase.get("end", "")
             if name and start and end:
                 phases.append((name, start, end))
 
@@ -117,7 +120,7 @@ def load_config_file(config_path: Path, custom_config_path: Optional[Path] = Non
         raise ValueError(f"No valid phases found in {config_path}")
 
     # Extract default assignee/author
-    default_assignee = config.get('default_assignee', '')
+    default_assignee = config.get("default_assignee", "")
 
     return phases, default_assignee
 
@@ -155,39 +158,39 @@ def load_team_members_from_yaml(config_path: Path, detailed: bool = False):
         return {} if detailed else []
 
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             config = yaml.safe_load(f)
     except yaml.YAMLError:
         return {} if detailed else []
 
-    if not config or 'team_members' not in config:
+    if not config or "team_members" not in config:
         return {} if detailed else []
 
     if detailed:
         # Return detailed information
         members_details = {}
-        for member in config['team_members']:
+        for member in config["team_members"]:
             if isinstance(member, dict):
-                identifier = member.get('email') or member.get('name')
+                identifier = member.get("email") or member.get("name")
                 if identifier:
                     members_details[identifier] = {
-                        'member': member.get('member', identifier),
-                        'email': member.get('email'),
-                        'name': member.get('name'),
-                        'leave_days': member.get('leave_days') or [],
-                        'capacity': member.get('capacity', 1.0)
+                        "member": member.get("member", identifier),
+                        "email": member.get("email"),
+                        "name": member.get("name"),
+                        "leave_days": member.get("leave_days") or [],
+                        "capacity": member.get("capacity", 1.0),
                     }
         return members_details
     else:
         # Return simple list (backward compatible)
         members = []
-        for member in config['team_members']:
+        for member in config["team_members"]:
             if isinstance(member, dict):
                 # Support both 'email' (Jira) and 'name' (GitHub)
-                if 'email' in member:
-                    members.append(member['email'])
-                elif 'name' in member:
-                    members.append(member['name'])
+                if "email" in member:
+                    members.append(member["email"])
+                elif "name" in member:
+                    members.append(member["name"])
             elif isinstance(member, str):
                 members.append(member)
         return members
@@ -246,10 +249,13 @@ def upload_to_google_sheets(report_file: Optional[Path]) -> None:
         try:
             subprocess.run(
                 [
-                    sys.executable, "-m", "ai_impact_analysis.scripts.upload_to_sheets",
-                    "--report", str(report_file)
+                    sys.executable,
+                    "-m",
+                    "ai_impact_analysis.scripts.upload_to_sheets",
+                    "--report",
+                    str(report_file),
                 ],
-                check=True
+                check=True,
             )
             print()
         except subprocess.CalledProcessError:
@@ -265,7 +271,9 @@ def upload_to_google_sheets(report_file: Optional[Path]) -> None:
         print()
 
 
-def find_latest_comparison_report(reports_dir: Path, identifier: str, report_type: str) -> Optional[Path]:
+def find_latest_comparison_report(
+    reports_dir: Path, identifier: str, report_type: str
+) -> Optional[Path]:
     """
     Find the most recent comparison report.
 
@@ -306,7 +314,9 @@ def load_team_members(team_members_file: Path) -> List[str]:
     return load_team_members_from_yaml(team_members_file)
 
 
-def resolve_member_identifier(identifier: str, config_path: Path) -> Tuple[Optional[str], Optional[Dict]]:
+def resolve_member_identifier(
+    identifier: str, config_path: Path
+) -> Tuple[Optional[str], Optional[Dict]]:
     """
     Resolve member identifier to email and details.
 
@@ -332,7 +342,7 @@ def resolve_member_identifier(identifier: str, config_path: Path) -> Tuple[Optio
 
     # Otherwise, try to find by short member name
     for email, details in members_details.items():
-        member_name = details.get('member', '')
+        member_name = details.get("member", "")
         if member_name == identifier:
             return email, details
 
@@ -341,10 +351,7 @@ def resolve_member_identifier(identifier: str, config_path: Path) -> Tuple[Optio
 
 
 def run_report_for_member(
-    script_path: Path,
-    member: str,
-    report_type: str,
-    extra_args: Optional[List[str]] = None
+    script_path: Path, member: str, report_type: str, extra_args: Optional[List[str]] = None
 ) -> bool:
     """
     Run report generation for a single team member.

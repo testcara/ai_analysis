@@ -38,12 +38,7 @@ class ReportOrchestrator:
         """Clean up old reports for the given identifier."""
         cleanup_old_reports(self.reports_dir, identifier, self.config.report_type)
 
-    def generate_phase_report(
-        self,
-        phase: Phase,
-        assignee: Optional[str] = None,
-        **kwargs
-    ) -> bool:
+    def generate_phase_report(self, phase: Phase, assignee: Optional[str] = None, **kwargs) -> bool:
         """
         Generate report for a single phase.
 
@@ -69,11 +64,7 @@ class ReportOrchestrator:
         """
         raise NotImplementedError("Subclasses must implement generate_comparison_report")
 
-    def run_workflow(
-        self,
-        assignee: Optional[str] = None,
-        **kwargs
-    ) -> Optional[Path]:
+    def run_workflow(self, assignee: Optional[str] = None, **kwargs) -> Optional[Path]:
         """
         Run the complete report generation workflow.
 
@@ -119,9 +110,7 @@ class ReportOrchestrator:
 
         # Find the generated report
         comparison_file = find_latest_comparison_report(
-            self.reports_dir,
-            identifier,
-            self.config.report_type
+            self.reports_dir, identifier, self.config.report_type
         )
 
         if comparison_file:
@@ -134,7 +123,9 @@ class ReportOrchestrator:
 class JiraReportOrchestrator(ReportOrchestrator):
     """Orchestrator for Jira report generation."""
 
-    def __init__(self, config: AnalysisConfig, reports_dir: Path, limit_team_members: Optional[Path] = None):
+    def __init__(
+        self, config: AnalysisConfig, reports_dir: Path, limit_team_members: Optional[Path] = None
+    ):
         """
         Initialize Jira orchestrator.
 
@@ -146,17 +137,16 @@ class JiraReportOrchestrator(ReportOrchestrator):
         super().__init__(config, reports_dir)
         self.limit_team_members = limit_team_members
 
-    def generate_phase_report(
-        self,
-        phase: Phase,
-        assignee: Optional[str] = None,
-        **kwargs
-    ) -> bool:
+    def generate_phase_report(self, phase: Phase, assignee: Optional[str] = None, **kwargs) -> bool:
         """Generate Jira report for a single phase."""
         args = [
-            sys.executable, "-m", "ai_impact_analysis.cli.get_jira_metrics",
-            "--start", phase.start_date,
-            "--end", phase.end_date,
+            sys.executable,
+            "-m",
+            "ai_impact_analysis.cli.get_jira_metrics",
+            "--start",
+            phase.start_date,
+            "--end",
+            phase.end_date,
         ]
 
         if assignee:
@@ -173,7 +163,9 @@ class JiraReportOrchestrator(ReportOrchestrator):
     def generate_comparison_report(self, assignee: Optional[str] = None) -> bool:
         """Generate Jira comparison report."""
         args = [
-            sys.executable, "-m", "ai_impact_analysis.cli.generate_jira_comparison_report",
+            sys.executable,
+            "-m",
+            "ai_impact_analysis.cli.generate_jira_comparison_report",
         ]
 
         if assignee:
@@ -190,17 +182,17 @@ class GitHubReportOrchestrator(ReportOrchestrator):
     """Orchestrator for GitHub PR report generation."""
 
     def generate_phase_report(
-        self,
-        phase: Phase,
-        assignee: Optional[str] = None,
-        incremental: bool = False,
-        **kwargs
+        self, phase: Phase, assignee: Optional[str] = None, incremental: bool = False, **kwargs
     ) -> bool:
         """Generate GitHub PR metrics for a single phase."""
         args = [
-            sys.executable, "-m", "ai_impact_analysis.cli.get_pr_metrics",
-            "--start", phase.start_date,
-            "--end", phase.end_date,
+            sys.executable,
+            "-m",
+            "ai_impact_analysis.cli.get_pr_metrics",
+            "--start",
+            phase.start_date,
+            "--end",
+            phase.end_date,
         ]
 
         if assignee:
@@ -218,7 +210,9 @@ class GitHubReportOrchestrator(ReportOrchestrator):
     def generate_comparison_report(self, assignee: Optional[str] = None) -> bool:
         """Generate GitHub PR comparison report."""
         args = [
-            sys.executable, "-m", "ai_impact_analysis.cli.generate_pr_comparison_report",
+            sys.executable,
+            "-m",
+            "ai_impact_analysis.cli.generate_pr_comparison_report",
         ]
 
         if assignee:

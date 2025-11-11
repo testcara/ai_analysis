@@ -39,12 +39,8 @@ dev = [
     "mypy>=1.0",
 ]
 
-[project.scripts]
-get-jira-metrics = "bin.get_jira_metrics:main"
-generate-jira-comparison = "bin.generate_jira_comparison_report:main"
-
 [tool.setuptools]
-packages = ["ai_impact_analysis", "bin"]
+packages = ["ai_impact_analysis"]
 
 [tool.black]
 line-length = 100

@@ -18,7 +18,7 @@ from ai_impact_analysis.utils.workflow_utils import (
     load_config_file,
     get_project_root,
     load_team_members_from_yaml,
-    resolve_member_identifier
+    resolve_member_identifier,
 )
 
 
@@ -133,7 +133,7 @@ def main():
         output_dir="reports/jira",
         output_file=args.output,
         report_type="jira",
-        phase_configs=phases
+        phase_configs=phases,
     )
 
     return 0

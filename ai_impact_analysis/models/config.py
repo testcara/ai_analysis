@@ -11,7 +11,7 @@ class Phase:
 
     name: str
     start_date: str  # YYYY-MM-DD format
-    end_date: str    # YYYY-MM-DD format
+    end_date: str  # YYYY-MM-DD format
 
     def __post_init__(self):
         """Validate dates."""
@@ -37,15 +37,11 @@ class AnalysisConfig:
         cls,
         phases: List[Tuple[str, str, str]],
         default_assignee: Optional[str] = None,
-        report_type: str = "jira"
+        report_type: str = "jira",
     ) -> "AnalysisConfig":
         """Create config from list of phase tuples."""
         phase_objects = [Phase(name=p[0], start_date=p[1], end_date=p[2]) for p in phases]
-        return cls(
-            phases=phase_objects,
-            default_assignee=default_assignee,
-            report_type=report_type
-        )
+        return cls(phases=phase_objects, default_assignee=default_assignee, report_type=report_type)
 
 
 @dataclass

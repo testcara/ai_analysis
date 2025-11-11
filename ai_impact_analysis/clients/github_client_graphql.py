@@ -57,9 +57,7 @@ class GitHubGraphQLClient:
         self.repo_name = repo_name or os.getenv("GITHUB_REPO_NAME")
 
         if not self.token:
-            raise ValueError(
-                "GitHub token is required. Set GITHUB_TOKEN environment variable."
-            )
+            raise ValueError("GitHub token is required. Set GITHUB_TOKEN environment variable.")
 
         if not self.repo_owner or not self.repo_name:
             raise ValueError(
@@ -231,15 +229,17 @@ class GitHubGraphQLClient:
                 except requests.exceptions.Timeout:
                     if retry < max_retries - 1:
                         logger.warning(f"Request timeout, retrying ({retry + 1}/{max_retries})...")
-                        time.sleep(2 ** retry)  # Exponential backoff: 1s, 2s, 4s
+                        time.sleep(2**retry)  # Exponential backoff: 1s, 2s, 4s
                     else:
                         logger.error("Max retries reached, request failed")
                         raise
                 except requests.exceptions.HTTPError as e:
                     if e.response.status_code == 504:  # Gateway timeout
                         if retry < max_retries - 1:
-                            logger.warning(f"Server timeout (504), retrying ({retry + 1}/{max_retries})...")
-                            time.sleep(2 ** retry)
+                            logger.warning(
+                                f"Server timeout (504), retrying ({retry + 1}/{max_retries})..."
+                            )
+                            time.sleep(2**retry)
                         else:
                             logger.error("Max retries reached after 504 errors")
                             raise
@@ -261,7 +261,12 @@ class GitHubGraphQLClient:
             found_in_range = 0
             oldest_merged_in_page = None
             newest_merged_in_page = None
-            filtered_reasons = {"not_merged": 0, "bot_author": 0, "author_mismatch": 0, "date_out_of_range": 0}
+            filtered_reasons = {
+                "not_merged": 0,
+                "bot_author": 0,
+                "author_mismatch": 0,
+                "date_out_of_range": 0,
+            }
 
             # Process and filter PRs
             for pr_node in prs_in_page:
@@ -279,7 +284,9 @@ class GitHubGraphQLClient:
                     continue
 
                 # Check author (skip bots)
-                pr_author = pr_node.get("author", {}).get("login", "") if pr_node.get("author") else ""
+                pr_author = (
+                    pr_node.get("author", {}).get("login", "") if pr_node.get("author") else ""
+                )
                 if not pr_author or self.is_bot_user(pr_author):
                     filtered_reasons["bot_author"] += 1
                     continue
@@ -307,7 +314,9 @@ class GitHubGraphQLClient:
             logger.info(f"Page {page} summary:")
             logger.info(f"  - Found {found_in_range}/{len(prs_in_page)} PRs in date range")
             if oldest_merged_in_page and newest_merged_in_page:
-                logger.info(f"  - Merge dates on page: {oldest_merged_in_page.date()} to {newest_merged_in_page.date()}")
+                logger.info(
+                    f"  - Merge dates on page: {oldest_merged_in_page.date()} to {newest_merged_in_page.date()}"
+                )
             logger.info(f"  - Filtered: {sum(filtered_reasons.values())} PRs")
             for reason, count in filtered_reasons.items():
                 if count > 0:
@@ -324,8 +333,12 @@ class GitHubGraphQLClient:
             if page >= 10 and len(all_prs) == 0 and oldest_merged_in_page:
                 end_dt = datetime.strptime(end_date, "%Y-%m-%d")
                 if oldest_merged_in_page > end_dt:
-                    logger.info(f"After {page} pages, oldest merged PR ({oldest_merged_in_page.date()}) is still after end date ({end_date})")
-                    logger.info("PRs in your date range might be further back. Continuing search...")
+                    logger.info(
+                        f"After {page} pages, oldest merged PR ({oldest_merged_in_page.date()}) is still after end date ({end_date})"
+                    )
+                    logger.info(
+                        "PRs in your date range might be further back. Continuing search..."
+                    )
                     # Don't stop, keep searching
 
             # Pagination
@@ -339,7 +352,9 @@ class GitHubGraphQLClient:
 
             # Safety limit - increased to search deeper
             if page > 100:  # Max 100 pages = 2500 PRs
-                logger.warning(f"Reached maximum page limit (100 pages). Found {len(all_prs)} PRs so far.")
+                logger.warning(
+                    f"Reached maximum page limit (100 pages). Found {len(all_prs)} PRs so far."
+                )
                 logger.warning("If this seems low, your target date range might be very old.")
                 break
 
@@ -458,7 +473,9 @@ class GitHubGraphQLClient:
         end = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
 
         if not (start <= merged_at < end):
-            logger.debug(f"PR #{pr_number}: Merged date {merged_at.date()} outside range ({start_date} to {end_date}), skipping")
+            logger.debug(
+                f"PR #{pr_number}: Merged date {merged_at.date()} outside range ({start_date} to {end_date}), skipping"
+            )
             return None
 
         logger.debug(f"PR #{pr_number}: Matched! Author={pr_author}, Merged={merged_at.date()}")
@@ -527,7 +544,10 @@ class GitHubGraphQLClient:
             message = commit.get("commit", {}).get("message", "")
 
             # Check for AI assistance markers
-            if "assisted-by: claude" in message.lower() or "co-authored-by: claude" in message.lower():
+            if (
+                "assisted-by: claude" in message.lower()
+                or "co-authored-by: claude" in message.lower()
+            ):
                 ai_tools.add("Claude")
                 ai_commits += 1
 
